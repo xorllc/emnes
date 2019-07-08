@@ -23,7 +23,7 @@ def do_cpu(a, b):
 
 
 # We'll iterate a million times for a 1mhz CPU at the very least.
-for i in range(0, 1024 * 1024):
+for i in range(0, int(1024 * 1024 * 1.79)):
     a, b = do_cpu(a, b)
 
 
@@ -65,8 +65,8 @@ print(f"Elapsed: {time.time() - before}")
 #
 # iPhone 7 Plus
 # -------------
-# Pythonista 3.6.1: 1.14 seconds
+# Pythonista 3.6.1: 1.31 seconds
 #
 # iPad, 6th Gen
 # -------------
-# Pythonista 3.6.1: 1.15 seconds
+# Pythonista 3.6.1: 1.32 seconds
