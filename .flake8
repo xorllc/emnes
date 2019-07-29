@@ -1,0 +1,32 @@
+[flake8]
+max-line-length = 100
+
+# E203 whitespace before ',' -- Disabling this one because Black does the proper formatting and
+# apparently PEP8 says nothing about the : operator in a slice, which Black inserts a space
+# before.
+#
+# W503 line break before binary operator -- Disabling this one, as we're going to format a multi
+# line arithmetic equation as
+# (
+#    one
+#    + two
+#    + three
+# )
+# so that the operator can be easily seen at the beginning of each line instead of having
+# to look at the end of each line to search for the operator.
+#
+# D100 Missing docstring in public module -- We have one class per module, which documents itself.
+#
+# D104 Missing docstring in public package -- Disabling for now.
+#
+# D200 One-line docstring should fit on one line with quotes -- There should be only one way to format
+#   a docstring.
+#
+# D205 1 blank line required between summary line and description -- A summary that is on more than
+#   one line confuses this rule, so we're disabling it.
+#
+# D400 First line should end with a period -- Summary may need to be multiline, so disabling this rule.
+#
+# D401 First line should be in imperative mood -- Imperativeness detection is too naive, so turning off.
+#
+ignore=E203,W503,D100,D104,D200,D205,D400,D401,

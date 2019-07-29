@@ -1,0 +1,35 @@
+# Styles the code properly
+- repo: https://github.com/ambv/black
+  rev: stable
+  hooks:
+  - id: black
+    language_version: python3.7
+# Warns us of anything that wasn't fixed by black
+- repo: https://gitlab.com/pycqa/flake8
+  rev: '3.7.8'
+  hooks:
+  - id: flake8
+    # Also do pydocstyle. pydocstyle4 is currently broken when used with the
+    # latest pycodestyle, which is used by flake8, so force the version
+    # to lower than 4.
+    additional_dependencies: [flake8-docstrings, "pydocstyle<4"]
+# List of super useful formatters.
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v2.2.3
+  hooks:
+  # Ensures the code is real Python code
+  - id: check-ast
+  # Ensures a file name will resolve on all platform
+  - id: check-case-conflict
+  # Checks files with x bit have #!/usr/env python3
+  - id: check-executables-have-shebangs
+  # Ensure there's <<<<< >>>>> from incomplete merges
+  - id: check-merge-conflict
+  # Adds an empty line if missing at the end of a file.
+  - id: end-of-file-fixer
+  # Ensures files contain the # -*- coding: utf-8 -*- at the beginning
+  - id: fix-encoding-pragma
+  # Makes sure requirements.txt is properly formatted
+  - id: requirements-txt-fixer
+  # Removes trailing whitespaces.
+  - id: trailing-whitespace
