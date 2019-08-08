@@ -62,6 +62,10 @@ how the CPU reacts in the various addressing modes and the small glitches in som
 [Easy 6502](https://skilldrick.github.io/easy6502/#stack): This is an online emulator for the
 6502 CPU. Very useful to debug a set of instructions and understand how bits are set.
 
+[64doc](http://atarihq.com/danb/files/64doc.txt) This is the Commodore 64 CPU timings documentation, which is the same CPU as the NES. It's fully documents when the CPU ticks. If you want to write a precise emulator which's clock
+ticks at the right moment, this is the document to read. This is how I peperred my `CPU` code
+with calls to `self._tick()`.
+
 ## Tests
 
 When writing an emulator, you'll want to have a good test suite to make sure that any changes you make won't

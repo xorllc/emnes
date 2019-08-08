@@ -16,7 +16,7 @@ class MemoryBus:
         :param emnes.Cartridge cartridge: Cartridge that is was loaded into the emulator.
         """
         self._cartridge = cartridge
-        self._ram = bytearray(0x2000)
+        self._ram = bytearray(0x800)
         self._ppu = bytearray(8)
         self._memory_reg = bytearray(0x20)
 
@@ -28,8 +28,12 @@ class MemoryBus:
 
         :returns: The byte that was read.
         """
+        # Test for the two most common memory regions first.
         if addr >= 0x8000:
             return self._cartridge.read_rom_byte(addr - 0x8000)
+        elif addr < 0x2000:
+            addr &= 0x7FF
+            return self._ram[addr]
         elif addr >= 0x6000:
             return self._cartridge.read_sram_byte(addr - 0x6000)
         elif addr >= 0x4020:
@@ -39,18 +43,7 @@ class MemoryBus:
         elif addr >= 0x2000:
             return self._ppu[(addr & 0x2007) - 0x2000]
         else:
-            addr &= 0x7FF
-            return self._ram[addr]
-
-    def read_word(self, addr):
-        """
-        Read a word from memory.
-
-        :param int addr: Address to read a word from.
-
-        :returns: The word that was read.
-        """
-        return self.read_byte(addr) + (self.read_byte(addr + 1) << 8)
+            raise RuntimeError(f"Unexpected memory read {hex(addr)}")
 
     def read_array(self, addr, length):
         """
@@ -73,8 +66,12 @@ class MemoryBus:
         :param int addr: Address to write a byte to.
         :param int value: Value of the byte to write.
         """
+        # Test for the two most common memory regions first.
         if addr >= 0x8000:
             self._cartridge.write_rom_byte(addr - 0x8000, value)
+        elif addr < 0x2000:
+            addr &= 0x7FF
+            self._ram[addr] = value
         elif addr >= 0x6000:
             self._cartridge.write_sram_byte(addr - 0x6000, value)
         elif addr >= 0x4020:
@@ -84,8 +81,7 @@ class MemoryBus:
         elif addr >= 0x2000:
             self._ppu[(addr & 0x2007) - 0x2000] = value
         else:
-            addr &= 0x7FF
-            self._ram[addr] = value
+            raise RuntimeError(f"Unexpected memory write at {hex(addr)}")
 
     def _not_implemented(self, region, addr, is_read):
         """
@@ -100,13 +96,3 @@ class MemoryBus:
         raise NotImplementedError(
             f"{region} {'read' if is_read else 'write'} at {hex(addr)} not implemented."
         )
-
-    def write_word(self, addr, value):
-        """
-        Write a byte to memory.
-
-        :param int addr: Address to write a byte to.
-        :param int value: Value of the byte to write.
-        """
-        self.write_byte(addr, value & 0xFF)
-        self.write_byte(addr + 1, value >> 8)

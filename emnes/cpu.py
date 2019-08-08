@@ -5,8 +5,6 @@
 #
 # See LICENSE at the root of this project for more info.
 
-# from emnes.instructions import instructions
-
 
 class CPU:
     """
@@ -16,13 +14,15 @@ class CPU:
     """
 
     __slots__ = [
+        ############################################################################################
         # These are the CPU registers
         "_accumulator",
         "_index_x",
         "_index_y",
         "_program_counter",
         "_stack_pointer",
-        # These are the individuals bits of the status register.
+        ############################################################################################
+        # Status register bits
         "_carry_flag",
         "_zero_flag",
         "_interrupt_disabled_flag",
@@ -30,13 +30,24 @@ class CPU:
         "_decimal_mode_flag",
         "_overflow_flag",
         "_negative_flag",
+        ############################################################################################
+        # Miscellaneous
         "_memory_bus",
+        # The _opcodes array holds a list of callables that are going to be
+        # called for each instruction.
         "_opcodes",
+        # Clock cycles are not calculated at the end of the instruction, but
+        # actually during the execution of the CPU instruction themselves,
+        # allowing a greater emulation accuracy, which some games require.
+        # Essentially, every single read/write operation makes the CPU tick by a
+        # cycle. Then some instructions have some internal lag as well.
+        "_nb_cycles",
     ]
 
     def __init__(self, memory_bus):
         """
-        :param emnes.MemoryBus memory_bus: Bus the CPU will use to read and write memory.
+        :param emnes.MemoryBus memory_bus: Bus the CPU will use to read and
+            write memory.
         """
         self._memory_bus = memory_bus
 
@@ -52,18 +63,18 @@ class CPU:
         self._index_y = 0
 
         self._stack_pointer = 0xFD
-
-        self.reset()
+        self._program_counter = (
+            self._memory_bus.read_byte(0xFFFC) | self._memory_bus.read_byte(0xFFFD) << 8
+        )
+        self._nb_cycles = 0
 
         # Allocate room for all the opcodes.
-        # Prefill the array with unknown opcodes functors. We'll them replace them
-        # with real instructions. This is better than inserting Nones in the array
-        # and testing for them each emulation cycle. It saves a lot of time. Like 1 second on a 3
-        # seconds run in PyPy
+        # Prefill the array with unknown opcodes functors. We'll them replace
+        # them with real instructions.
         self._opcodes = list(lambda: self._unknown_opcode(i) for i in range(256))
 
         # NOP
-        self._opcodes[0xEA] = lambda: None
+        self._opcodes[0xEA] = self._nop
 
         # Break
         self._opcodes[0x00] = self._break
@@ -82,8 +93,9 @@ class CPU:
         # Stack related operations
         self._opcodes[0x28] = self._pop_status_register
         self._opcodes[0x08] = self._push_status_register
-        self._opcodes[0x48] = lambda: self._push_byte(self._accumulator)
-        self._opcodes[0x68] = lambda: self._load_accumulator(self._pop_byte())
+        # Waste a cycle reading and the push the byte.
+        self._opcodes[0x48] = self._push_accumulator
+        self._opcodes[0x68] = self._pop_accumulator
 
         ############################################################################################
         # Jump instructions
@@ -96,75 +108,57 @@ class CPU:
         ############################################################################################
         # Store operands
         # Y -> Memory
-        self._opcodes[0x84] = lambda: self._memory_bus.write_byte(self._zero_page(), self._index_y)
-        self._opcodes[0x94] = lambda: self._memory_bus.write_byte(
-            self._zero_page_x(), self._index_y
-        )
-        self._opcodes[0x8C] = lambda: self._memory_bus.write_byte(self._absolute(), self._index_y)
+        self._opcodes[0x84] = lambda: self._write_byte(self._zero_page(), self._index_y)
+        self._opcodes[0x94] = lambda: self._write_byte(self._zero_page_x(), self._index_y)
+        self._opcodes[0x8C] = lambda: self._write_byte(self._absolute(), self._index_y)
 
         # X -> Memory
-        self._opcodes[0x86] = lambda: self._memory_bus.write_byte(self._zero_page(), self._index_x)
-        self._opcodes[0x96] = lambda: self._memory_bus.write_byte(
-            self._zero_page_y(), self._index_x
-        )
-        self._opcodes[0x8E] = lambda: self._memory_bus.write_byte(self._absolute(), self._index_x)
+        self._opcodes[0x86] = lambda: self._write_byte(self._zero_page(), self._index_x)
+        self._opcodes[0x96] = lambda: self._write_byte(self._zero_page_y(), self._index_x)
+        self._opcodes[0x8E] = lambda: self._write_byte(self._absolute(), self._index_x)
 
         # Accumulator -> Memory
-        self._opcodes[0x85] = lambda: self._memory_bus.write_byte(
-            self._zero_page(), self._accumulator
-        )
-        self._opcodes[0x95] = lambda: self._memory_bus.write_byte(
-            self._zero_page_x(), self._accumulator
-        )
-        self._opcodes[0x8D] = lambda: self._memory_bus.write_byte(
-            self._absolute(), self._accumulator
-        )
-        self._opcodes[0x9D] = lambda: self._memory_bus.write_byte(
-            self._absolute_x(), self._accumulator
-        )
-        self._opcodes[0x99] = lambda: self._memory_bus.write_byte(
-            self._absolute_y(), self._accumulator
-        )
-        self._opcodes[0x81] = lambda: self._memory_bus.write_byte(
-            self._indirect_x(), self._accumulator
-        )
-        self._opcodes[0x91] = lambda: self._memory_bus.write_byte(
-            self._indirect_y(), self._accumulator
-        )
+        self._opcodes[0x85] = lambda: self._write_byte(self._zero_page(), self._accumulator)
+        self._opcodes[0x95] = lambda: self._write_byte(self._zero_page_x(), self._accumulator)
+        self._opcodes[0x8D] = lambda: self._write_byte(self._absolute(), self._accumulator)
+        self._opcodes[0x9D] = lambda: self._write_byte(self._absolute_x_write(), self._accumulator)
+        self._opcodes[0x99] = lambda: self._write_byte(self._absolute_y_write(), self._accumulator)
+        self._opcodes[0x81] = lambda: self._write_byte(self._indirect_x(), self._accumulator)
+        self._opcodes[0x91] = lambda: self._write_byte(self._indirect_y_write(), self._accumulator)
 
         ############################################################################################
         # Loads opcodes
         # Accumulator <- X|Y|Memory
-        self._opcodes[0x98] = lambda: self._load_accumulator(self._index_y)
-        self._opcodes[0x8A] = lambda: self._load_accumulator(self._index_x)
-        self._opcodes[0xA9] = lambda: self._load_accumulator(self._immediate_read())
-        self._opcodes[0xA5] = lambda: self._load_accumulator(self._zero_page_read())
-        self._opcodes[0xB5] = lambda: self._load_accumulator(self._zero_page_x_read())
-        self._opcodes[0xAD] = lambda: self._load_accumulator(self._absolute_read())
-        self._opcodes[0xBD] = lambda: self._load_accumulator(self._absolute_x_read())
-        self._opcodes[0xB9] = lambda: self._load_accumulator(self._absolute_y_read())
-        self._opcodes[0xA1] = lambda: self._load_accumulator(self._indirect_x_read())
-        self._opcodes[0xB1] = lambda: self._load_accumulator(self._indirect_y_read())
+        self._opcodes[0x98] = self._tya
+        self._opcodes[0x8A] = self._txa
+        self._opcodes[0xA9] = lambda: self._lda(self._immediate())
+        self._opcodes[0xA5] = lambda: self._lda(self._zero_page())
+        self._opcodes[0xB5] = lambda: self._lda(self._zero_page_x())
+        self._opcodes[0xAD] = lambda: self._lda(self._absolute())
+        self._opcodes[0xBD] = lambda: self._lda(self._absolute_x())
+        self._opcodes[0xB9] = lambda: self._lda(self._absolute_y())
+        self._opcodes[0xA1] = lambda: self._lda(self._indirect_x())
+        self._opcodes[0xB1] = lambda: self._lda(self._indirect_y())
 
         # Y <- Memory|Accumulator
-        self._opcodes[0xA0] = lambda: self._load_index_y(self._immediate_read())
-        self._opcodes[0xA4] = lambda: self._load_index_y(self._zero_page_read())
-        self._opcodes[0xB4] = lambda: self._load_index_y(self._zero_page_x_read())
-        self._opcodes[0xAC] = lambda: self._load_index_y(self._absolute_read())
-        self._opcodes[0xBC] = lambda: self._load_index_y(self._absolute_x_read())
-        self._opcodes[0xA8] = lambda: self._load_index_y(self._accumulator)
+        self._opcodes[0xA0] = lambda: self._ldy(self._immediate())
+        self._opcodes[0xA4] = lambda: self._ldy(self._zero_page())
+        self._opcodes[0xB4] = lambda: self._ldy(self._zero_page_x())
+        self._opcodes[0xAC] = lambda: self._ldy(self._absolute())
+        self._opcodes[0xBC] = lambda: self._ldy(self._absolute_x())
+        self._opcodes[0xA8] = self._tay
 
         # X <- Memory|Accumulator|Stack Pointer
-        self._opcodes[0xA2] = lambda: self._load_index_x(self._immediate_read())
-        self._opcodes[0xA6] = lambda: self._load_index_x(self._zero_page_read())
-        self._opcodes[0xB6] = lambda: self._load_index_x(self._zero_page_y_read())
-        self._opcodes[0xAE] = lambda: self._load_index_x(self._absolute_read())
-        self._opcodes[0xBE] = lambda: self._load_index_x(self._absolute_y_read())
-        self._opcodes[0xAA] = lambda: self._load_index_x(self._accumulator)
-        self._opcodes[0xBA] = lambda: self._load_index_x(self._stack_pointer)
+        self._opcodes[0xA2] = lambda: self._ldx(self._immediate())
+        self._opcodes[0xA6] = lambda: self._ldx(self._zero_page())
+        self._opcodes[0xB6] = lambda: self._ldx(self._zero_page_y())
+        self._opcodes[0xAE] = lambda: self._ldx(self._absolute())
+        self._opcodes[0xBE] = lambda: self._ldx(self._absolute_y())
+        self._opcodes[0xAA] = self._tax
+        self._opcodes[0xBA] = self._tsx
 
         # SP <- X
-        self._opcodes[0x9A] = self._transfer_index_x_to_stack_pointer
+        self._opcodes[0x9A] = self._txs
 
         ############################################################################################
         # Branching
@@ -180,15 +174,15 @@ class CPU:
         ############################################################################################
         # Bitwise operators
         # Bit testing
-        self._opcodes[0x24] = lambda: self._bit(self._zero_page_read())
-        self._opcodes[0x2C] = lambda: self._bit(self._absolute_read())
+        self._opcodes[0x24] = lambda: self._bit(self._zero_page())
+        self._opcodes[0x2C] = lambda: self._bit(self._absolute())
 
         # Shift left
         self._opcodes[0x0A] = lambda: self._rmw_accumulator(self._asl)
         self._opcodes[0x06] = lambda: self._rmw_memory(self._zero_page(), self._asl)
         self._opcodes[0x16] = lambda: self._rmw_memory(self._zero_page_x(), self._asl)
         self._opcodes[0x0E] = lambda: self._rmw_memory(self._absolute(), self._asl)
-        self._opcodes[0x1E] = lambda: self._rmw_memory(self._absolute_x(), self._asl)
+        self._opcodes[0x1E] = lambda: self._rmw_memory(self._absolute_x_write(), self._asl)
 
         # Shift right
         self._opcodes[0x4A] = lambda: self._rmw_accumulator(self._logical_shift_right)
@@ -198,7 +192,7 @@ class CPU:
         )
         self._opcodes[0x4E] = lambda: self._rmw_memory(self._absolute(), self._logical_shift_right)
         self._opcodes[0x5E] = lambda: self._rmw_memory(
-            self._absolute_x(), self._logical_shift_right
+            self._absolute_x_write(), self._logical_shift_right
         )
 
         # Rotate left
@@ -206,44 +200,44 @@ class CPU:
         self._opcodes[0x26] = lambda: self._rmw_memory(self._zero_page(), self._rotate_left)
         self._opcodes[0x36] = lambda: self._rmw_memory(self._zero_page_x(), self._rotate_left)
         self._opcodes[0x2E] = lambda: self._rmw_memory(self._absolute(), self._rotate_left)
-        self._opcodes[0x3E] = lambda: self._rmw_memory(self._absolute_x(), self._rotate_left)
+        self._opcodes[0x3E] = lambda: self._rmw_memory(self._absolute_x_write(), self._rotate_left)
 
         # Rotate Right
         self._opcodes[0x6A] = lambda: self._rmw_accumulator(self._rotate_right)
         self._opcodes[0x66] = lambda: self._rmw_memory(self._zero_page(), self._rotate_right)
         self._opcodes[0x76] = lambda: self._rmw_memory(self._zero_page_x(), self._rotate_right)
         self._opcodes[0x6E] = lambda: self._rmw_memory(self._absolute(), self._rotate_right)
-        self._opcodes[0x7E] = lambda: self._rmw_memory(self._absolute_x(), self._rotate_right)
+        self._opcodes[0x7E] = lambda: self._rmw_memory(self._absolute_x_write(), self._rotate_right)
 
         # OR
-        self._opcodes[0x09] = lambda: self._logical_inclusive_or(self._immediate_read())
-        self._opcodes[0x05] = lambda: self._logical_inclusive_or(self._zero_page_read())
-        self._opcodes[0x15] = lambda: self._logical_inclusive_or(self._zero_page_x_read())
-        self._opcodes[0x0D] = lambda: self._logical_inclusive_or(self._absolute_read())
-        self._opcodes[0x1D] = lambda: self._logical_inclusive_or(self._absolute_x_read())
-        self._opcodes[0x19] = lambda: self._logical_inclusive_or(self._absolute_y_read())
-        self._opcodes[0x01] = lambda: self._logical_inclusive_or(self._indirect_x_read())
-        self._opcodes[0x11] = lambda: self._logical_inclusive_or(self._indirect_y_read())
+        self._opcodes[0x09] = lambda: self._ora(self._immediate())
+        self._opcodes[0x05] = lambda: self._ora(self._zero_page())
+        self._opcodes[0x15] = lambda: self._ora(self._zero_page_x())
+        self._opcodes[0x0D] = lambda: self._ora(self._absolute())
+        self._opcodes[0x1D] = lambda: self._ora(self._absolute_x())
+        self._opcodes[0x19] = lambda: self._ora(self._absolute_y())
+        self._opcodes[0x01] = lambda: self._ora(self._indirect_x())
+        self._opcodes[0x11] = lambda: self._ora(self._indirect_y())
 
         # Exclusive OR
-        self._opcodes[0x49] = lambda: self._exclusive_or(self._immediate_read())
-        self._opcodes[0x45] = lambda: self._exclusive_or(self._zero_page_read())
-        self._opcodes[0x55] = lambda: self._exclusive_or(self._zero_page_x_read())
-        self._opcodes[0x4D] = lambda: self._exclusive_or(self._absolute_read())
-        self._opcodes[0x5D] = lambda: self._exclusive_or(self._absolute_x_read())
-        self._opcodes[0x59] = lambda: self._exclusive_or(self._absolute_y_read())
-        self._opcodes[0x41] = lambda: self._exclusive_or(self._indirect_x_read())
-        self._opcodes[0x51] = lambda: self._exclusive_or(self._indirect_y_read())
+        self._opcodes[0x49] = lambda: self._eor(self._immediate())
+        self._opcodes[0x45] = lambda: self._eor(self._zero_page())
+        self._opcodes[0x55] = lambda: self._eor(self._zero_page_x())
+        self._opcodes[0x4D] = lambda: self._eor(self._absolute())
+        self._opcodes[0x5D] = lambda: self._eor(self._absolute_x())
+        self._opcodes[0x59] = lambda: self._eor(self._absolute_y())
+        self._opcodes[0x41] = lambda: self._eor(self._indirect_x())
+        self._opcodes[0x51] = lambda: self._eor(self._indirect_y())
 
         # AND
-        self._opcodes[0x29] = lambda: self._logical_and(self._immediate_read())
-        self._opcodes[0x25] = lambda: self._logical_and(self._zero_page_read())
-        self._opcodes[0x35] = lambda: self._logical_and(self._zero_page_x_read())
-        self._opcodes[0x2D] = lambda: self._logical_and(self._absolute_read())
-        self._opcodes[0x3D] = lambda: self._logical_and(self._absolute_x_read())
-        self._opcodes[0x39] = lambda: self._logical_and(self._absolute_y_read())
-        self._opcodes[0x21] = lambda: self._logical_and(self._indirect_x_read())
-        self._opcodes[0x31] = lambda: self._logical_and(self._indirect_y_read())
+        self._opcodes[0x29] = lambda: self._and(self._immediate())
+        self._opcodes[0x25] = lambda: self._and(self._zero_page())
+        self._opcodes[0x35] = lambda: self._and(self._zero_page_x())
+        self._opcodes[0x2D] = lambda: self._and(self._absolute())
+        self._opcodes[0x3D] = lambda: self._and(self._absolute_x())
+        self._opcodes[0x39] = lambda: self._and(self._absolute_y())
+        self._opcodes[0x21] = lambda: self._and(self._indirect_x())
+        self._opcodes[0x31] = lambda: self._and(self._indirect_y())
 
         ############################################################################################
         # Arithmetic
@@ -251,7 +245,7 @@ class CPU:
         self._opcodes[0xE6] = lambda: self._rmw_memory(self._zero_page(), self._increment)
         self._opcodes[0xF6] = lambda: self._rmw_memory(self._zero_page_x(), self._increment)
         self._opcodes[0xEE] = lambda: self._rmw_memory(self._absolute(), self._increment)
-        self._opcodes[0xFE] = lambda: self._rmw_memory(self._absolute_x(), self._increment)
+        self._opcodes[0xFE] = lambda: self._rmw_memory(self._absolute_x_write(), self._increment)
         self._opcodes[0xE8] = lambda: self._rmw_index_x(self._increment)
         self._opcodes[0xC8] = lambda: self._rmw_index_y(self._increment)
 
@@ -261,43 +255,43 @@ class CPU:
         self._opcodes[0xC6] = lambda: self._rmw_memory(self._zero_page(), self._decrement)
         self._opcodes[0xD6] = lambda: self._rmw_memory(self._zero_page_x(), self._decrement)
         self._opcodes[0xCE] = lambda: self._rmw_memory(self._absolute(), self._decrement)
-        self._opcodes[0xDE] = lambda: self._rmw_memory(self._absolute_x(), self._decrement)
+        self._opcodes[0xDE] = lambda: self._rmw_memory(self._absolute_x_write(), self._decrement)
 
         # Compare
-        self._opcodes[0xE0] = lambda: self._compare(self._index_x, self._immediate_read())
-        self._opcodes[0xE4] = lambda: self._compare(self._index_x, self._zero_page_read())
-        self._opcodes[0xEC] = lambda: self._compare(self._index_x, self._absolute_read())
-        self._opcodes[0xC0] = lambda: self._compare(self._index_y, self._immediate_read())
-        self._opcodes[0xC4] = lambda: self._compare(self._index_y, self._zero_page_read())
-        self._opcodes[0xCC] = lambda: self._compare(self._index_y, self._absolute_read())
-        self._opcodes[0xC9] = lambda: self._compare(self._accumulator, self._immediate_read())
-        self._opcodes[0xC5] = lambda: self._compare(self._accumulator, self._zero_page_read())
-        self._opcodes[0xD5] = lambda: self._compare(self._accumulator, self._zero_page_x_read())
-        self._opcodes[0xCD] = lambda: self._compare(self._accumulator, self._absolute_read())
-        self._opcodes[0xDD] = lambda: self._compare(self._accumulator, self._absolute_x_read())
-        self._opcodes[0xD9] = lambda: self._compare(self._accumulator, self._absolute_y_read())
-        self._opcodes[0xC1] = lambda: self._compare(self._accumulator, self._indirect_x_read())
-        self._opcodes[0xD1] = lambda: self._compare(self._accumulator, self._indirect_y_read())
+        self._opcodes[0xE0] = lambda: self._cmp(self._index_x, self._immediate())
+        self._opcodes[0xE4] = lambda: self._cmp(self._index_x, self._zero_page())
+        self._opcodes[0xEC] = lambda: self._cmp(self._index_x, self._absolute())
+        self._opcodes[0xC0] = lambda: self._cmp(self._index_y, self._immediate())
+        self._opcodes[0xC4] = lambda: self._cmp(self._index_y, self._zero_page())
+        self._opcodes[0xCC] = lambda: self._cmp(self._index_y, self._absolute())
+        self._opcodes[0xC9] = lambda: self._cmp(self._accumulator, self._immediate())
+        self._opcodes[0xC5] = lambda: self._cmp(self._accumulator, self._zero_page())
+        self._opcodes[0xD5] = lambda: self._cmp(self._accumulator, self._zero_page_x())
+        self._opcodes[0xCD] = lambda: self._cmp(self._accumulator, self._absolute())
+        self._opcodes[0xDD] = lambda: self._cmp(self._accumulator, self._absolute_x())
+        self._opcodes[0xD9] = lambda: self._cmp(self._accumulator, self._absolute_y())
+        self._opcodes[0xC1] = lambda: self._cmp(self._accumulator, self._indirect_x())
+        self._opcodes[0xD1] = lambda: self._cmp(self._accumulator, self._indirect_y())
 
         # Add
-        self._opcodes[0x69] = lambda: self._add_with_carry(self._immediate_read())
-        self._opcodes[0x65] = lambda: self._add_with_carry(self._zero_page_read())
-        self._opcodes[0x75] = lambda: self._add_with_carry(self._zero_page_x_read())
-        self._opcodes[0x6D] = lambda: self._add_with_carry(self._absolute_read())
-        self._opcodes[0x7D] = lambda: self._add_with_carry(self._absolute_x_read())
-        self._opcodes[0x79] = lambda: self._add_with_carry(self._absolute_y_read())
-        self._opcodes[0x61] = lambda: self._add_with_carry(self._indirect_x_read())
-        self._opcodes[0x71] = lambda: self._add_with_carry(self._indirect_y_read())
+        self._opcodes[0x69] = lambda: self._adc(self._immediate())
+        self._opcodes[0x65] = lambda: self._adc(self._zero_page())
+        self._opcodes[0x75] = lambda: self._adc(self._zero_page_x())
+        self._opcodes[0x6D] = lambda: self._adc(self._absolute())
+        self._opcodes[0x7D] = lambda: self._adc(self._absolute_x())
+        self._opcodes[0x79] = lambda: self._adc(self._absolute_y())
+        self._opcodes[0x61] = lambda: self._adc(self._indirect_x())
+        self._opcodes[0x71] = lambda: self._adc(self._indirect_y())
 
         # Substract
-        self._opcodes[0xE9] = lambda: self._substract_with_carry(self._immediate_read())
-        self._opcodes[0xE5] = lambda: self._substract_with_carry(self._zero_page_read())
-        self._opcodes[0xF5] = lambda: self._substract_with_carry(self._zero_page_x_read())
-        self._opcodes[0xED] = lambda: self._substract_with_carry(self._absolute_read())
-        self._opcodes[0xFD] = lambda: self._substract_with_carry(self._absolute_x_read())
-        self._opcodes[0xF9] = lambda: self._substract_with_carry(self._absolute_y_read())
-        self._opcodes[0xE1] = lambda: self._substract_with_carry(self._indirect_x_read())
-        self._opcodes[0xF1] = lambda: self._substract_with_carry(self._indirect_y_read())
+        self._opcodes[0xE9] = lambda: self._sbc(self._immediate())
+        self._opcodes[0xE5] = lambda: self._sbc(self._zero_page())
+        self._opcodes[0xF5] = lambda: self._sbc(self._zero_page_x())
+        self._opcodes[0xED] = lambda: self._sbc(self._absolute())
+        self._opcodes[0xFD] = lambda: self._sbc(self._absolute_x())
+        self._opcodes[0xF9] = lambda: self._sbc(self._absolute_y())
+        self._opcodes[0xE1] = lambda: self._sbc(self._indirect_x())
+        self._opcodes[0xF1] = lambda: self._sbc(self._indirect_y())
 
     def emulate(self):
         """
@@ -305,8 +299,44 @@ class CPU:
         """
         self._opcodes[self._read_code_byte()]()
 
+    def _tick(self):
+        """
+        Executes a CPU tick, which increments the number of cycles by 1.
+        """
+        # TODO: Invoke PPU tick from here in the future. There are 3 PPU ticks per CPU ticks.
+        self._nb_cycles += 1
+
+    # def _register_instructions(
+    #     self,
+    #     functor,
+    #     immediate=None,
+    #     page_zero=None,
+    #     page_zero_x=None,
+    #     page_zero_y=None,
+    #     absolute=None,
+    #     absolute_x=None,
+    #     absolute_y=None,
+    #     indexed_indirect=None,
+    #     indirect_indexed=None,
+    # ):
+    #     pass
+
     ################################################################################################
     # Accessors for the registers
+
+    @property
+    def nb_cycles(self):
+        """
+        Number of cycles elapsed since the start.
+        """
+        return self._nb_cycles
+
+    @nb_cycles.setter
+    def nb_cycles(self, nb_cycles):
+        """
+        Set the number of cycles elapsed since the start.
+        """
+        self._nb_cycles = nb_cycles
 
     @property
     def program_counter(self):
@@ -378,7 +408,8 @@ class CPU:
         Reset the CPU and jumps to the address referred by the interrupt vector at 0xFFFX.
         """
         self._stack_pointer = (self._stack_pointer - 3) & 0xFF
-        self._program_counter = self._memory_bus.read_word(0xFFFC)
+        self._interrupt_disabled_flag = True
+        self._program_counter = self._read_word(0xFFFC)
 
     def _read_code_byte(self):
         """
@@ -387,7 +418,7 @@ class CPU:
         :returns: The byte that was read.
         :rtype: int
         """
-        byte = self._memory_bus.read_byte(self._program_counter)
+        byte = self._read_byte(self._program_counter)
         self._program_counter += 1
         return byte
 
@@ -401,9 +432,39 @@ class CPU:
         :returns: The word that was read.
         :rtype: int
         """
-        word = self._memory_bus.read_word(self._program_counter)
-        self._program_counter += 2
-        return word
+        return self._read_code_byte() | (self._read_code_byte() << 8)
+
+    def _read_byte(self, addr):
+        """
+        Read a byte from memory.
+
+        :param int addr: Address to read from.
+
+        :returns: The read byte.
+        """
+        value = self._memory_bus.read_byte(addr)
+        self._tick()
+        return value
+
+    def _write_byte(self, addr, value):
+        """
+        Write a byte to memory.
+
+        :param int addr: Address to write to.
+        :param int value: Value to write.
+        """
+        self._memory_bus.write_byte(addr, value)
+        self._tick()
+
+    def _read_word(self, addr):
+        """
+        Read a word from memory.
+
+        :param int addr: Address to read from.
+
+        :returns: The read word.
+        """
+        return self._read_byte(addr) | (self._read_byte(addr + 1) << 8)
 
     ############################################################################
     # The following methods compute the address referred by the operand.
@@ -412,13 +473,26 @@ class CPU:
     # method name so we save one function call, which are expensive.
     _zero_page = _read_code_byte
 
+    def _immediate(self):
+        """
+        Compute the immediate address, i.e. address of the program counter
+
+        :returns: Program Counter value.
+        """
+        pc = self._program_counter
+        self._program_counter += 1
+        return pc
+
     def _zero_page_x(self):
         """
         Compute a memory address by adding the value of the next byte + X.
 
         :returns: Address between 0 and 255.
         """
-        return (self._zero_page() + self._index_x) & 0xFF
+        base = self._zero_page()
+        # waste a read cycle at the wrong locatiom
+        self._tick()
+        return (base + self._index_x) & 0xFF
 
     def _zero_page_y(self):
         """
@@ -426,7 +500,10 @@ class CPU:
 
         :returns: Address between 0 and 255.
         """
-        return (self._zero_page() + self._index_y) & 0xFF
+        base = self._zero_page()
+        # wastes a cycle reading at base
+        self._tick()
+        return (base + self._index_y) & 0xFF
 
     # _absolute would simply pass-through to _read_code_word, so alias the
     # method name so we save one function call, which are expensive.
@@ -449,9 +526,7 @@ class CPU:
             second_addr = addr & 0xFF00
         else:
             second_addr = addr + 1
-        return self._memory_bus.read_byte(first_addr) | (
-            self._memory_bus.read_byte(second_addr) << 8
-        )
+        return self._read_byte(first_addr) | (self._read_byte(second_addr) << 8)
 
     def _absolute_x(self):
         """
@@ -459,7 +534,23 @@ class CPU:
 
         :returns: Address between 0 and 65535.
         """
-        return (self._absolute() + self._index_x) & 0xFFFF
+        src = self._absolute()
+        dst = (src + self._index_x) & 0xFFFF
+        if self._is_new_page(src, dst):
+            self._tick()
+        return dst
+
+    def _absolute_x_write(self):
+        """
+        Compute memory address taken from the next word + index x during a write.
+
+        :returns: Address between 0 and 65535.
+        """
+        src = self._absolute()
+        dst = (src + self._index_x) & 0xFFFF
+        # During a write, we always tick, whether this is a new page or not.
+        self._tick()
+        return dst
 
     def _absolute_y(self):
         """
@@ -467,7 +558,23 @@ class CPU:
 
         :returns: Address between 0 and 65535.
         """
-        return (self._absolute() + self._index_y) & 0xFFFF
+        src = self._absolute()
+        dst = (src + self._index_y) & 0xFFFF
+        if self._is_new_page(src, dst):
+            self._tick()
+        return dst
+
+    def _absolute_y_write(self):
+        """
+        Compute memory address taken from the next word + index y during a write.
+
+        :returns: Address between 0 and 65535.
+        """
+        src = self._absolute()
+        dst = (src + self._index_y) & 0xFFFF
+        # During a write, we always tick, whether this is a new page or not.
+        self._tick()
+        return dst
 
     def _indirect(self):
         """
@@ -475,7 +582,7 @@ class CPU:
 
         :returns: Address between 0 and 65535.
         """
-        return self._memory_bus.read_word(self._absolute())
+        return self._read_word(self._absolute())
 
     def _indirect_x(self):
         """
@@ -484,9 +591,7 @@ class CPU:
         :returns: Address between 0 and 65535.
         """
         addr = self._zero_page_x()
-        return self._memory_bus.read_byte(addr) | (
-            self._memory_bus.read_byte((addr + 1) & 0xFF) << 8
-        )
+        return self._read_byte(addr) | (self._read_byte((addr + 1) & 0xFF) << 8)
 
     def _indirect_y(self):
         """
@@ -496,13 +601,27 @@ class CPU:
         :returns: Address between 0 and 65535.
         """
         addr = self._zero_page()
-        return (
-            (
-                self._memory_bus.read_byte(addr)
-                | (self._memory_bus.read_byte((addr + 1) & 0xFF) << 8)
-            )
-            + self._index_y
-        ) & 0xFFFF
+        src = self._read_byte(addr) | (self._read_byte((addr + 1) & 0xFF) << 8)
+        dst = (src + self._index_y) & 0xFFFF
+        if self._is_new_page(src, dst):
+            self._tick()
+
+        return dst
+
+    def _indirect_y_write(self):
+        """
+        Retrieve address in memory found at the zero page address and
+        adds the y offset during a write.
+
+        :returns: Address between 0 and 65535.
+        """
+        addr = self._zero_page()
+        src = self._read_byte(addr) | (self._read_byte((addr + 1) & 0xFF) << 8)
+        dst = (src + self._index_y) & 0xFFFF
+
+        # During a write, we always tick, whether this is a new page or not.
+        self._tick()
+        return dst
 
     def _relative(self):
         """
@@ -517,76 +636,6 @@ class CPU:
             return -256 + value
 
     ############################################################################
-    # The following methods retrieve the value referenced by the address of the
-    # operand.
-
-    _immediate_read = _read_code_byte
-
-    def _zero_page_read(self):
-        """
-        Read memory at zero page address.
-
-        :returns: A byte.
-        """
-        return self._memory_bus.read_byte(self._zero_page())
-
-    def _zero_page_x_read(self):
-        """
-        Read memory at zero page x address.
-
-        :returns: A byte.
-        """
-        return self._memory_bus.read_byte(self._zero_page_x())
-
-    def _zero_page_y_read(self):
-        """
-        Read memory at zero page y address.
-
-        :returns: A byte.
-        """
-        return self._memory_bus.read_byte(self._zero_page_y())
-
-    def _absolute_read(self):
-        """
-        Read memory at abslute address.
-
-        :returns: A byte.
-        """
-        return self._memory_bus.read_byte(self._absolute())
-
-    def _absolute_x_read(self):
-        """
-        Read memory at absolute x address.
-
-        :returns: A byte.
-        """
-        return self._memory_bus.read_byte(self._absolute_x())
-
-    def _absolute_y_read(self):
-        """
-        Read memory at absolute y address.
-
-        :returns: A byte.
-        """
-        return self._memory_bus.read_byte(self._absolute_y())
-
-    def _indirect_x_read(self):
-        """
-        Read memory at indirect x address.
-
-        :returns: A byte.
-        """
-        return self._memory_bus.read_byte(self._indirect_x())
-
-    def _indirect_y_read(self):
-        """
-        Read memory at indirect y address.
-
-        :returns: A byte.
-        """
-        return self._memory_bus.read_byte(self._indirect_y())
-
-    ############################################################################
     # The following methods operate on the stack.
 
     def _push_byte(self, value):
@@ -595,17 +644,8 @@ class CPU:
 
         :param int value: Value to push on the stack.
         """
-        self._memory_bus.write_byte((self._stack_pointer + 0x100), value)
+        self._write_byte((self._stack_pointer + 0x100), value)
         self._stack_pointer = (self._stack_pointer - 1) & 0xFF
-
-    def _pop_byte(self):
-        """
-        Pop a byte from the stack.
-
-        :returns: A byte.
-        """
-        self._stack_pointer = (self._stack_pointer + 1) & 0xFF
-        return self._memory_bus.read_byte(self._stack_pointer + 0x100)
 
     def _push_word(self, value):
         """
@@ -616,13 +656,19 @@ class CPU:
         self._push_byte(value >> 8)
         self._push_byte(value & 0xFF)
 
-    def _pop_word(self):
+    def _increment_stack_pointer(self):
         """
-        Pop a word from the stack.
+        Increments the stack pointer by 1.
+        """
+        self._stack_pointer = (self._stack_pointer + 1) & 0xFF
 
-        :returns: A byte.
+    def _read_stack_top(self):
         """
-        return self._pop_byte() | (self._pop_byte() << 8)
+        Reads the value at the top of the stack.
+
+        :returns: The top byte.
+        """
+        return self._read_byte(self._stack_pointer + 0x100)
 
     ############################################################################
     # The following emulates the CPU opcodes
@@ -632,12 +678,24 @@ class CPU:
         Save the current program counter and status register and jump to the
         interrupt handler address read from 0xFEEE
         """
+        # CPU wastes a cycle reading the next byte.
+        self._tick()
+
+        # Push the state of the program counter and status register
         self._push_word(self._program_counter + 1)
-        self._push_status_register()
-        addr = self._memory_bus.read_word(0xFFFE)
-        self._program_counter = addr
+        # TODO: Explain why we're ORing the value.
+        self._push_byte(self.status | 0b00010000)
+
+        # Update the program counter.
+        self._program_counter = self._read_word(0xFFFE)
         self._interrupt_disabled_flag = True
-        
+
+    def _nop(self):
+        """
+        Nop. It ticks!
+        """
+        self._tick()
+
     def _set_interupt_disable_flag(self, value):
         """
         Set the interrupt disable flag.
@@ -645,6 +703,7 @@ class CPU:
         :param bool value: Value to set the flag.
         """
         self._interrupt_disabled_flag = value
+        self._tick()
 
     def _set_carry_flag(self, value):
         """
@@ -653,6 +712,7 @@ class CPU:
         :param bool value: Value to set the flag.
         """
         self._carry_flag = value
+        self._tick()
 
     def _set_overflow_flag(self, value):
         """
@@ -661,6 +721,7 @@ class CPU:
         :param bool value: Value to set the flag.
         """
         self._overflow_flag = value
+        self._tick()
 
     def _set_decimal_mode_flag(self, value):
         """
@@ -669,12 +730,27 @@ class CPU:
         :param bool value: Value to set the flag.
         """
         self._decimal_mode_flag = value
-        
+        self._tick()
+
     def _pop_status_register(self):
         """
         Pop the status register from the stack.
         """
-        value = self._pop_byte()
+        self._tick()
+
+        self._increment_stack_pointer()
+        self._tick()
+
+        self._update_status_register(self._read_stack_top())
+
+    def _update_status_register(self, value):
+        """
+        Update the status flags with the given value.
+
+        It decomposes the byte into a set of booleans.
+
+        :param int value: Value of the flag register.
+        """
         self._carry_flag = bool(value & 0x1)
         self._zero_flag = bool(value & 0x2)
         self._interrupt_disabled_flag = bool(value & 0x4)
@@ -687,8 +763,29 @@ class CPU:
         Push the status register on the stack.
         """
         # The two unused bits are always pushed as set.
+        self._tick()
         self._push_byte(self.status | 0b00010000)
-        
+
+    def _push_accumulator(self):
+        """
+        Push the accumulator on the stack.
+        """
+        # Waste a cycle reading a byte.
+        self._tick()
+        self._push_byte(self._accumulator)
+
+    def _pop_accumulator(self):
+        """
+        Pops the accumulator from the stack.
+        """
+        # Waste a cycle reading a byte.
+        self._tick()
+
+        self._increment_stack_pointer()
+        self._tick()
+
+        self._load_accumulator(self._read_stack_top())
+
     def _jump(self, addr):
         """
         Update the program counter to the passed in address.
@@ -703,31 +800,88 @@ class CPU:
 
         Pushes the return address on stack first.
         """
-        jump_to = self._absolute()
-        self._push_word(self._program_counter - 1)
-        self._program_counter = jump_to
+        pcl = self._read_code_byte()
+        # Waste a cycle
+        self._tick()
+        self._push_word(self._program_counter)
+        pch = self._read_code_byte()
+        self._program_counter = pcl | (pch << 8)
 
     def _jump_from_subroutine(self):
         """
         Jump to the memory location at the top of the stack.
         """
-        self._program_counter = self._pop_word() + 1
+        # waste a read
+        self._tick()
+
+        self._increment_stack_pointer()
+        self._tick()
+
+        pcl = self._read_stack_top()
+        self._increment_stack_pointer()
+
+        pch = self._read_stack_top()
+
+        self._program_counter = pcl | (pch << 8)
+
+        self._program_counter += 1
+        self._tick()
 
     def _return_from_interrupt(self):
         """
         Pop the status register and program counter from the stack.
         """
-        self._pop_status_register()
-        self._program_counter = self._pop_word()
+        # CPU wastes one cycle reading the next byte.
+        self._tick()
+
+        self._increment_stack_pointer()
+        self._tick()
+
+        self._update_status_register(self._read_stack_top())
+        self._increment_stack_pointer()
+
+        pcl = self._read_stack_top()
+        self._increment_stack_pointer()
+
+        pch = self._read_stack_top()
+
+        self._program_counter = pcl | (pch << 8)
 
     def _load_index_x(self, value):
         """
         Load value into register x.
+
+        :param value: Value to load into x.
         """
         self._index_x = value
         self._zero_flag = not value
         self._negative_flag = bool(value & 0x80)
-        
+
+    def _ldx(self, addr):
+        """
+        Load value at a given address into x.
+
+        :param int addr: Address to load value into.
+        """
+        value = self._read_byte(addr)
+        self._index_x = value
+        self._zero_flag = not value
+        self._negative_flag = bool(value & 0x80)
+
+    def _tax(self):
+        """
+        Transfer accumulator into x.
+        """
+        self._load_index_x(self._accumulator)
+        self._tick()
+
+    def _tsx(self):
+        """
+        Transfer x into stack pointer.
+        """
+        self._load_index_x(self._stack_pointer)
+        self._tick()
+
     def _load_index_y(self, value):
         """
         Load value into register y.
@@ -738,6 +892,38 @@ class CPU:
         self._zero_flag = not value
         self._negative_flag = bool(value & 0x80)
 
+    def _ldy(self, addr):
+        """
+        Load value into register y.
+
+        :param int value: Value to load.
+        """
+        value = self._read_byte(addr)
+        self._index_y = value
+        self._zero_flag = not value
+        self._negative_flag = bool(value & 0x80)
+
+    def _tay(self):
+        """
+        Transfer accumulator into y.
+        """
+        self._load_index_y(self._accumulator)
+        self._tick()
+
+    def _tya(self):
+        """
+        Transfer y into accumulator.
+        """
+        self._load_accumulator(self._index_y)
+        self._tick()
+
+    def _txa(self):
+        """
+        Transfer x into accumulator.
+        """
+        self._load_accumulator(self._index_x)
+        self._tick()
+
     def _load_accumulator(self, value):
         """
         Load value into accumulator
@@ -747,13 +933,25 @@ class CPU:
         self._accumulator = value
         self._zero_flag = not value
         self._negative_flag = bool(value & 0x80)
-        
-    def _transfer_index_x_to_stack_pointer(self):
+
+    def _lda(self, addr):
+        """
+        Loads a byte from memory into accumulator.
+
+        :param int addr: Address to read the byte from.
+        """
+        value = self._read_byte(addr)
+        self._accumulator = value
+        self._zero_flag = not value
+        self._negative_flag = bool(value & 0x80)
+
+    def _txs(self):
         """
         Load X into stack pointer.
         """
         self._stack_pointer = self._index_x
-        
+        self._tick()
+
     def _branch_if(self, should_branch):
         """
         Offset the program counter by to the relative address read from memory
@@ -765,18 +963,35 @@ class CPU:
         # the program counter is updated.
         offset = self._relative()
         if should_branch:
-            self._program_counter += offset
-            
-    def _bit(self, value):
+            self._tick()
+            destination = self._program_counter + offset
+            if self._is_new_page(self._program_counter, destination):
+                self._tick()
+            self._program_counter = destination
+
+    def _is_new_page(self, src, dest):
+        """
+        Compare addresses to see if the destination is a new page.
+
+        :param int src: Source address
+        :param int dest: Destination address
+
+        :returns: ``True`` if the src and dest are on different pages, ``False``
+            otherwise.
+        """
+        return (src & 0xFF00) != (dest & 0xFF00)
+
+    def _bit(self, addr):
         """
         Test the overflow and negative bit and zero value of the passed in value.
 
         :param int value: Value to test.
         """
+        value = self._read_byte(addr)
         self._overflow_flag = bool(value & 0b01000000)
         self._negative_flag = bool(value & 0b10000000)
         self._zero_flag = not (self._accumulator & value)
-        
+
     def _asl(self, value):
         """
         Shift bits from the passed in value left.
@@ -808,7 +1023,7 @@ class CPU:
         self._zero_flag = not result
         self._negative_flag = bool(result & 0x80)
         return result
-        
+
     def _rotate_left(self, value):
         """
         Rotate bits from the passed in value left.
@@ -841,36 +1056,39 @@ class CPU:
         self._negative_flag = bool(result & 0x80)
         return result
 
-    def _logical_inclusive_or(self, value):
+    def _ora(self, addr):
         """
         Update the accumulator with the result of accumulator | value
 
         :param int value: Value to or with.
         """
+        value = self._read_byte(addr)
         self._accumulator = self._accumulator | value
         self._zero_flag = not self._accumulator
         self._negative_flag = bool(self._accumulator & 0x80)
 
-    def _exclusive_or(self, value):
+    def _eor(self, addr):
         """
         Update the accumulator with the result of accumulator ^ value
 
         :param int value: Value to exclusive or with.
         """
+        value = self._read_byte(addr)
         self._accumulator = self._accumulator ^ value
         self._zero_flag = not self._accumulator
         self._negative_flag = bool(self._accumulator & 0x80)
 
-    def _logical_and(self, value):
+    def _and(self, addr):
         """
         Update the accumulator with the result of accumulator & value
 
         :param int value: Value to and with.
         """
+        value = self._read_byte(addr)
         self._accumulator = self._accumulator & value
         self._zero_flag = not self._accumulator
         self._negative_flag = bool(self._accumulator & 0x80)
-        
+
     def _increment(self, value):
         """
         Increment a value and returns the result.
@@ -901,23 +1119,25 @@ class CPU:
         self._negative_flag = bool(result & 0x80)
         return result
 
-    def _compare(self, first, second):
+    def _cmp(self, first, addr):
         """
         Compare two values and sets the flags accordingly.
 
         :param int first: First value to compare.
         :param int second: Second value to compare.
         """
+        second = self._read_byte(addr)
         self._zero_flag = first == second
         self._carry_flag = second <= first
         self._negative_flag = bool((first - second) & 0x80)
 
-    def _add_with_carry(self, value):
+    def _adc(self, addr):
         """
         Add the accumulator to the passed in value using the carry flag and update the accumulator.
 
         :param int value: Value to add.
         """
+        value = self._read_byte(addr)
         result = value + self._accumulator + int(self._carry_flag)
         signed_result = (
             self._signed(value) + self._signed(self._accumulator) + int(self._carry_flag)
@@ -928,13 +1148,14 @@ class CPU:
         self._overflow_flag = signed_result < -128 or signed_result > 127
         self._negative_flag = bool(result & 0x80)
 
-    def _substract_with_carry(self, value):
+    def _sbc(self, addr):
         """
         Substract the passed in value and the carry flag from the accumulator and update the
         accumulator.
 
         :param int value: Value to add.
         """
+        value = self._read_byte(addr)
         # I gave up trying to understand this operand, so I copied code from Nintendulator.
         # https://github.com/quietust/nintendulator/blob/master/src/CPU.cpp#L805-L813
         result = self._accumulator + (value ^ 0xFF) + int(self._carry_flag)
@@ -954,8 +1175,10 @@ class CPU:
         :param int addr: Address to read/write to.
         :param callable instruction: Method that will operate on the byte.
         """
-        value = self._memory_bus.read_byte(addr)
-        self._memory_bus.write_byte(addr, instruction(value))
+        value = self._read_byte(addr)
+        # Write the byte back to the source before executing the instruction.
+        self._write_byte(addr, value)
+        self._write_byte(addr, instruction(value))
 
     def _rmw_index_x(self, instruction):
         """
@@ -964,6 +1187,8 @@ class CPU:
         :param callable instruction: Method that will operate on the register.
         """
         self._index_x = instruction(self._index_x)
+        # Waste a cycle, not documented why.
+        self._tick()
 
     def _rmw_index_y(self, instruction):
         """
@@ -972,6 +1197,8 @@ class CPU:
         :param callable instruction: Method that will operate on the register.
         """
         self._index_y = instruction(self._index_y)
+        # Waste a cycle, not documented why.
+        self._tick()
 
     def _rmw_accumulator(self, instruction):
         """
@@ -980,6 +1207,10 @@ class CPU:
 
         :param callable instruction: Method that will operate on the register.
         """
+        # RMW instructions always waste a cycle writing back the original
+        # value back to the memory location. For the accumulator, we can
+        # simply tick.
+        self._tick()
         self._accumulator = instruction(self._accumulator)
 
     def _signed(self, value):
@@ -996,4 +1227,9 @@ class CPU:
         return value
 
     def _unknown_opcode(self, opcode):
+        """
+        Raises an NotImplementedError with the opcode number.
+
+        :param int opcode: Opcode to raise the error with.
+        """
         raise NotImplementedError(f"Unknown opcode {hex(opcode)}")

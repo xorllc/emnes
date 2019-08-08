@@ -377,7 +377,7 @@ They are found after the set_test macro. For example, the cause of test
 code 3 would be found in a line containing set_test 3. Examples:
 
 	Tones         Binary  Decimal  Meaning
-	- - - - - - - - - - - - - - - - - - - - 
+	- - - - - - - - - - - - - - - - - - - -
 	low              0      0      passed
 	low high        01      1      failed
 	low high low   010      2      error 2
@@ -394,5 +394,5 @@ NSF versions also make periodic clicks to prevent the NSF player from
 thinking the track is silent and thus ending the track before it's done
 testing.
 
--- 
+--
 Shay Green <gblargg@gmail.com>

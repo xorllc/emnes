@@ -9,20 +9,33 @@ import os
 import re
 from collections import namedtuple
 from emnes import NES
+import pytest
 
 
 def _get_output_from_0x6400(bus):
     i = 0
     while bus.read_byte(0x6004 + i) != 0:
         i += 1
-    return str(bus.read_array(0x6004, i))
+    return bus.read_array(0x6004, i).decode("utf-8")
 
 
-def test_blargg():
+@pytest.mark.parametrize(
+    "rom_location",
+    [
+        # Ensures instrutions all work properly
+        "roms/cpu/instructions/blargg/official_only.nes",
+        # Ensures registers are in the right state on power up
+        # and reset.
+        "roms/cpu/reset/registers.nes",
+        # Ensures the RAM is in the right state after a reset.
+        "roms/cpu/reset/ram_after_reset.nes",
+    ],
+)
+def test_blargg(rom_location):
     """
     Ensures all instructions do as espected.
     """
-    test_rom = os.path.dirname(__file__) + "/roms/cpu/blargg/official_only.nes"
+    test_rom = os.path.join(os.path.dirname(__file__), *rom_location.split("/"))
     nes = NES()
     nes.load_rom(test_rom)
 
@@ -43,6 +56,13 @@ def test_blargg():
             raise Exception(
                 "Test failed. Here's the test output:\n\n" + _get_output_from_0x6400(nes.memory_bus)
             )
+        elif tests_are_running and nes.memory_bus.read_byte(0x6000) == 0x81:
+            # This code means the console needs to be reset about 100 ms from now.
+            # 100 ms is 1/10th of a second, which is roughly 170,000 CPU cycles.
+            wait_end = nes.cpu.nb_cycles + 170000
+            while nes.cpu.nb_cycles < wait_end:
+                nes.emulate()
+            nes.reset()
     else:
         raise Exception(
             "Test took too long to execute! Here's the test output:\n\n"
@@ -110,8 +130,8 @@ def test_nestest():
 
     It also tests a few unofficial opcodes, but not all.
     """
-    test_log = os.path.dirname(__file__) + "/roms/cpu/nestest/nestest.log"
-    test_rom = os.path.dirname(__file__) + "/roms/cpu/nestest/nestest.nes"
+    test_log = os.path.dirname(__file__) + "/roms/cpu/instructions/nestest/nestest.log"
+    test_rom = os.path.dirname(__file__) + "/roms/cpu/instructions/nestest/nestest.nes"
     nes = NES()
     nes.load_rom(test_rom)
 
@@ -119,6 +139,12 @@ def test_nestest():
     # how to setup our automated test.
     nes.cpu.program_counter = 0xC000
     nes.cpu.stack_pointer = 0xFD
+    nes.cpu.nb_cycles = 7
+
+    previous_cycle = 0
+    previous_expected_cycle = 0
+    previous_line = ""
+
     for line_idx, line in enumerate(open(test_log, "rt")):
         # Break on this line in the file, as we don't support opcodes
         # past this address.
@@ -132,8 +158,21 @@ def test_nestest():
             assert hex(state.index_y) == hex(nes.cpu.index_y)
             assert hex(state.stack_pointer) == hex(nes.cpu.stack_pointer)
             assert hex(state.status) == hex(nes.cpu.status)
-            # assert hex(state.nb_cycles) == hex(nes.cpu.nb_cycles)
+            expected_cycle = state.nb_cycles
+            current_cycle = nes.cpu.nb_cycles
+
+            nb_cycles_for_instruction = current_cycle - previous_cycle
+            nb_expected_cycles_for_instruction = expected_cycle - previous_expected_cycle
+            assert nb_cycles_for_instruction == nb_expected_cycles_for_instruction
+
+            previous_expected_cycle = expected_cycle
+            previous_cycle = current_cycle
+            previous_line = line
             nes.emulate()
         except Exception:
-            print(f"Failed on line {line_idx + 1}.")
+            print(f"Line index: {line_idx}")
+            print(f"Failed on:")
+            print(line)
+            print(f"Previous:")
+            print(f"{previous_line}")
             raise

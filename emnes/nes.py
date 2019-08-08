@@ -49,7 +49,6 @@ class NES:
         self._cartridge.power()
         self._memory_bus = MemoryBus(self._cartridge)
         self._cpu = CPU(self._memory_bus)
-        self.reset()
 
     def reset(self):
         """

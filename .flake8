@@ -29,4 +29,4 @@ max-line-length = 100
 #
 # D401 First line should be in imperative mood -- Imperativeness detection is too naive, so turning off.
 #
-ignore=E203,W503,D100,D104,D200,D205,D400,D401,
+ignore=E203,W503,D100,D104,D200,D205,D400,D401
