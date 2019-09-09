@@ -66,6 +66,12 @@ how the CPU reacts in the various addressing modes and the small glitches in som
 ticks at the right moment, this is the document to read. This is how I peperred my `CPU` code
 with calls to `self._tick()`.
 
+### PPU documentation
+
+[NesDev's wiki](http://wiki.nesdev.com/w/index.php/PPU): The majority of this emulator's PPU is based on what is found in this document. There isn't any need to really look at other resources to understand how the PPU works, altought there are other sites that present some of the information in simpler fashion.
+
+[PPU (RP2C02) Nintendo NES Documentation](https://docs.google.com/document/d/1mLIbnKyXrYkLBGxV83oBb-vO0U48FQMkeGNTW4fspZQ/mobilebasic): This document is really great. It repeats some of the information from the NesDev wiki, but accompanies it with a lot of visuals showing the contents of the PPU memory.
+
 ## Tests
 
 When writing an emulator, you'll want to have a good test suite to make sure that any changes you make won't

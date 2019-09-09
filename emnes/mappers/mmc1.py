@@ -45,6 +45,7 @@ class MMC1(MapperBase):
         self._nb_rom_banks = header.nb_rom_banks
         self._current_register = None
         self._register_value = 0b10000
+        self._is_16kb_switching = False
 
         # By default, the lower area points to the first bank...
         self._8000_bank_offset = 0
@@ -116,10 +117,10 @@ class MMC1(MapperBase):
                     # Then we'll compute the base address of each
                     # mapped bank, which will be contiguous 16kb blocks.
                     bank_number >>= 1
-                    self._8000_bank_offset = bank_offset * 32 * 1024
+                    self._8000_bank_offset = bank_number * 32 * 1024
                     # Here there's no need to remove 0x4000 from the address
                     # because the memory is contiguous.
-                    self._C000_bank_offset = bank_offset * 32 * 1024
+                    self._C000_bank_offset = bank_number * 32 * 1024
                 self._register_value = 0b10000
 
     def read_rom_byte(self, addr):

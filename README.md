@@ -10,7 +10,8 @@ Why another NES emulator? There are so many after all? Why not help a team worki
 
 # Running the emulator
 
-You can't run the emulator yet, there's nothing for now.
+1. Clone the repo
+2. From the root of the repo, type `python -m emnes <path-to-a-rom>`. Launching the emulator without a rom will display a list of options.
 
 ## Documentation
 

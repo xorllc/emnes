@@ -65,9 +65,8 @@ class CartridgeReader:
             nb_sram_banks = 1
 
         rom_data_start = 16 + (512 if has_trainer else 0)
-        rom_data_end = rom_data_start + 16 * 1024 * nb_rom_banks
 
-        assert rom_data_end <= len(cart_data)
+        rom_data = cart_data[rom_data_start:]
 
         header = CartridgeHeader(
             nb_rom_banks,
@@ -78,8 +77,6 @@ class CartridgeReader:
             nb_sram_banks,
         )
 
-        rom = cart_data[rom_data_start:rom_data_end]
-
-        mapper = MapperRegistry.create_mapper(mapper_number, header, rom)
+        mapper = MapperRegistry.create_mapper(mapper_number, header, rom_data)
 
         return mapper

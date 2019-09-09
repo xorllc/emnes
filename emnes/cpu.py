@@ -5,6 +5,21 @@
 #
 # See LICENSE at the root of this project for more info.
 
+import enum
+
+
+class InterruptState(enum.IntEnum):
+    """
+    Interrupt state of the CPU.
+
+    NONE means the CPU is not executing an interrupt, VBLANK means we're in VBLANK
+    and RESET means the reset button was pressed.
+    """
+
+    NONE = 0
+    VBLANK = 1
+    RESET = 2
+
 
 class CPU:
     """
@@ -33,6 +48,7 @@ class CPU:
         ############################################################################################
         # Miscellaneous
         "_memory_bus",
+        "_ppu",
         # The _opcodes array holds a list of callables that are going to be
         # called for each instruction.
         "_opcodes",
@@ -42,14 +58,19 @@ class CPU:
         # Essentially, every single read/write operation makes the CPU tick by a
         # cycle. Then some instructions have some internal lag as well.
         "_nb_cycles",
+        # Interrupt state is a flag that indicates the current interrupt.
+        "_interrupt_state",
     ]
 
-    def __init__(self, memory_bus):
+    def __init__(self, ppu, memory_bus):
         """
         :param emnes.MemoryBus memory_bus: Bus the CPU will use to read and
             write memory.
         """
         self._memory_bus = memory_bus
+        self._memory_bus.cpu = self
+        self._ppu = ppu
+        self._ppu.cpu = self
 
         self._carry_flag = False
         self._zero_flag = False
@@ -81,8 +102,8 @@ class CPU:
 
         ############################################################################################
         # Status register modifiers
-        self._opcodes[0x78] = lambda: self._set_interupt_disable_flag(True)
-        self._opcodes[0x58] = lambda: self._set_interupt_disable_flag(False)
+        self._opcodes[0x78] = lambda: self._set_interrupt_disable_flag(True)
+        self._opcodes[0x58] = lambda: self._set_interrupt_disable_flag(False)
         self._opcodes[0xF8] = lambda: self._set_decimal_mode_flag(True)
         self._opcodes[0xD8] = lambda: self._set_decimal_mode_flag(False)
         self._opcodes[0x18] = lambda: self._set_carry_flag(False)
@@ -293,33 +314,80 @@ class CPU:
         self._opcodes[0xE1] = lambda: self._sbc(self._indirect_x())
         self._opcodes[0xF1] = lambda: self._sbc(self._indirect_y())
 
+        self._interrupt_state = InterruptState.NONE
+
     def emulate(self):
         """
         Emulate one instruction.
+
+        In an interrupt was raised, the program counter will be updated with the
+        right address from the interrupt vector at 0xFFFA-0xFFFF instead of executing
+        the next operation.
+
+        :returns: Number of cycles elapsed.
         """
-        self._opcodes[self._read_code_byte()]()
+        nb_cycles_before = self._nb_cycles
+        if self._interrupt_state == InterruptState.NONE:
+            self._opcodes[self._read_code_byte()]()
+        elif self._interrupt_state == InterruptState.VBLANK:
+            # CPU wastes a cycle reading the next instruction
+            self._read_byte(self._program_counter)
+            self._handle_interrupt(0xFFFA)
+            self._interrupt_state = InterruptState.NONE
+        return self._nb_cycles - nb_cycles_before
+
+    def vblank_interrupt(self):
+        """
+        Raises the VBLANK interrupt flag.
+
+        One the next call to emulate, the program counter will be updated with the
+        address stored at 0xFFFA-0xFFFB.
+        """
+        self._interrupt_state = InterruptState.VBLANK
+
+    def dma_transfer(self, address_high):
+        """
+        Executes a DMA transfer.
+
+        :param int address_high: High byte of the address to launch a DMA transfer
+                                 to the OAM memory.
+        """
+        # There's one extra tick for waiting for writes to finish
+        self._tick()
+        # Then one other extra tick on odd CPU cycles.
+        if self._nb_cycles % 2 == 1:
+            self._tick()
+        # Then 512 cycles are spent copying data around. Using write_byte
+        # read_byte will count those 512 cycles for us.
+        start = address_high << 8
+        for addr in range(start, start + 256):
+            # Hardware wise this actually implemented as 256 writes to the
+            # PPUOAMDATA register (0x2004), so do the same.
+            self._write_byte(0x2004, self._read_byte(addr))
+
+    def _handle_interrupt(self, interrupt_addr):
+        """
+        Push the program counter and status bits and jump to the location
+        stored at the given address.
+
+        There are three interrupt types: reset, vblank and break.
+
+        :param int interrupt_addr: Address of interrupt vector index to load and
+                                   jump to.
+        """
+        # Push the state of the program counter and status register
+        self._push_word(self._program_counter)
+        self._push_byte(self.status | 0b00010000)
+
+        # Update the program counter.
+        self._program_counter = self._read_word(interrupt_addr)
+        self._interrupt_disabled_flag = True
 
     def _tick(self):
         """
         Executes a CPU tick, which increments the number of cycles by 1.
         """
-        # TODO: Invoke PPU tick from here in the future. There are 3 PPU ticks per CPU ticks.
         self._nb_cycles += 1
-
-    # def _register_instructions(
-    #     self,
-    #     functor,
-    #     immediate=None,
-    #     page_zero=None,
-    #     page_zero_x=None,
-    #     page_zero_y=None,
-    #     absolute=None,
-    #     absolute_x=None,
-    #     absolute_y=None,
-    #     indexed_indirect=None,
-    #     indirect_indexed=None,
-    # ):
-    #     pass
 
     ################################################################################################
     # Accessors for the registers
@@ -407,6 +475,9 @@ class CPU:
         """
         Reset the CPU and jumps to the address referred by the interrupt vector at 0xFFFX.
         """
+        # Do not call the _handle_interrupt routine here. The CPU doesn't actually
+        # write to the RAM the values upon reset.
+        # https://wiki.nesdev.com/w/index.php/CPU_power_up_state
         self._stack_pointer = (self._stack_pointer - 3) & 0xFF
         self._interrupt_disabled_flag = True
         self._program_counter = self._read_word(0xFFFC)
@@ -678,17 +749,10 @@ class CPU:
         Save the current program counter and status register and jump to the
         interrupt handler address read from 0xFEEE
         """
-        # CPU wastes a cycle reading the next byte.
-        self._tick()
-
-        # Push the state of the program counter and status register
-        self._push_word(self._program_counter + 1)
-        # TODO: Explain why we're ORing the value.
-        self._push_byte(self.status | 0b00010000)
-
-        # Update the program counter.
-        self._program_counter = self._read_word(0xFFFE)
-        self._interrupt_disabled_flag = True
+        # Break eats the next byte, which means that it effectively jumps over
+        # the next one byte instruction.
+        self._read_code_byte()
+        self._handle_interrupt(0xFFFE)
 
     def _nop(self):
         """
@@ -696,7 +760,7 @@ class CPU:
         """
         self._tick()
 
-    def _set_interupt_disable_flag(self, value):
+    def _set_interrupt_disable_flag(self, value):
         """
         Set the interrupt disable flag.
 
@@ -823,7 +887,6 @@ class CPU:
         pch = self._read_stack_top()
 
         self._program_counter = pcl | (pch << 8)
-
         self._program_counter += 1
         self._tick()
 
@@ -1232,4 +1295,6 @@ class CPU:
 
         :param int opcode: Opcode to raise the error with.
         """
-        raise NotImplementedError(f"Unknown opcode {hex(opcode)}")
+        raise NotImplementedError(
+            f"Unknown opcode {hex(opcode)} at {hex(self._program_counter - 1)}"
+        )

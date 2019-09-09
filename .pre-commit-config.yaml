@@ -1,18 +1,4 @@
 # Styles the code properly
-- repo: https://github.com/ambv/black
-  rev: stable
-  hooks:
-  - id: black
-    language_version: python3.7
-# Warns us of anything that wasn't fixed by black
-- repo: https://gitlab.com/pycqa/flake8
-  rev: '3.7.8'
-  hooks:
-  - id: flake8
-    # Also do pydocstyle. pydocstyle4 is currently broken when used with the
-    # latest pycodestyle, which is used by flake8, so force the version
-    # to lower than 4.
-    additional_dependencies: [flake8-docstrings, "pydocstyle<4"]
 # List of super useful formatters.
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v2.2.3
@@ -33,3 +19,9 @@
   - id: requirements-txt-fixer
   # Removes trailing whitespaces.
   - id: trailing-whitespace
+# Leave black and flake8 at the bottom so all touchups are done before they are run.
+- repo: https://github.com/ambv/black
+  rev: stable
+  hooks:
+  - id: black
+    language_version: python3.7

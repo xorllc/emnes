@@ -11,14 +11,20 @@ class MemoryBus:
     This class routes read/writes from the CPU to the right device.
     """
 
-    def __init__(self, cartridge):
+    def __init__(self, cartridge, ppu):
         """
         :param emnes.Cartridge cartridge: Cartridge that is was loaded into the emulator.
         """
         self._cartridge = cartridge
         self._ram = bytearray(0x800)
-        self._ppu = bytearray(8)
+        self._ppu = ppu
+        self._ppu.memory_bus = self
         self._memory_reg = bytearray(0x20)
+
+    def _set_cpu(self, cpu):
+        self._cpu = cpu
+
+    cpu = property(None, _set_cpu)
 
     def read_byte(self, addr):
         """
@@ -41,7 +47,7 @@ class MemoryBus:
         elif addr >= 0x4000:
             return self._memory_reg[addr - 0x4000]
         elif addr >= 0x2000:
-            return self._ppu[(addr & 0x2007) - 0x2000]
+            return self._ppu.read_byte(addr & 0x2007)
         else:
             raise RuntimeError(f"Unexpected memory read {hex(addr)}")
 
@@ -77,9 +83,12 @@ class MemoryBus:
         elif addr >= 0x4020:
             self._not_implemented("Expansion ROM (0x4020-0x6000)", addr, is_read=False)
         elif addr >= 0x4000:
-            self._memory_reg[addr - 0x4000] = value
+            if addr == 0x4014:
+                self._cpu.dma_transfer(value)
+            else:
+                self._memory_reg[addr - 0x4000] = value
         elif addr >= 0x2000:
-            self._ppu[(addr & 0x2007) - 0x2000] = value
+            self._ppu.write_byte(addr & 0x2007, value)
         else:
             raise RuntimeError(f"Unexpected memory write at {hex(addr)}")
 

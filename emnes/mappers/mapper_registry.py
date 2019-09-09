@@ -26,7 +26,7 @@ class MapperRegistry:
         :param int mapper_number: Mapper number that corresponds to one of the
             supported mapper types.
         :param emnes.readers.CartridgeHeader header: Cartridge information.
-        :param bytearray cart_data: Array of ROM data.
+        :param bytearray cart_data: Bytes from the cartridge.
 
         :returns: Instance of a :class:`emnes.mappers.MemoryBase` derived class.
         """

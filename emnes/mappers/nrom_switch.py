@@ -17,7 +17,7 @@ class NROMSwitch(MapperBase):
     - 32kb of memory mapped once
     """
 
-    __slots__ = ["_data", "_address_mask"]
+    __slots__ = ["_rom", "_vrom", "_address_mask"]
 
     def __init__(self, header, data):
         """
@@ -28,11 +28,23 @@ class NROMSwitch(MapperBase):
         # If there is only one bank, the higher area
         # will simply mirror data in the lower area.
         # as such, we're only concerned with the first 0x3FFF
+
         if header.nb_rom_banks == 1:
             self._address_mask = 0x3FFF
+            vrom_start = 16 * 1024
         else:
             self._address_mask = 0xFFFF
-        self._data = data
+            vrom_start = 32 * 1024
+
+        self._rom = data[:vrom_start]
+        self._vrom = data[vrom_start:]
+
+    def configure(self, ppu):
+        """
+        Configures the PPU for reading the video rom memory.
+        """
+        if self._vrom:
+            ppu.configure(self._vrom)
 
     def write_rom_byte(self, addr, data):
         """
@@ -50,4 +62,4 @@ class NROMSwitch(MapperBase):
 
         :returns: The read byte.
         """
-        return self._data[addr & self._address_mask]
+        return self._rom[addr & self._address_mask]

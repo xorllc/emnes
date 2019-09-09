@@ -73,21 +73,22 @@ def main():
     nb_cycles = 0
 
     for i in range(args.nb_runs):
+        single_run_start = time.time()
         # The Blarg test suites initializes memory 0x6001-0x6003 to let the test
         # running the emulator that the result at 0x6000 can be read to interpret
         # the result of the tests. So loop until we reach that milestone.
         while (
-            nes._memory_bus.read_byte(0x6001) != 0xDE
-            and nes._memory_bus.read_byte(0x6002) != 0xB0
-            and nes._memory_bus.read_byte(0x6003) != 0x61
+            nes.memory_bus.read_byte(0x6001) != 0xDE
+            and nes.memory_bus.read_byte(0x6002) != 0xB0
+            and nes.memory_bus.read_byte(0x6003) != 0x61
         ):
-            nes._cpu.emulate()
+            nes.emulate_once()
             nb_instructions += 1
 
         # Now that we know that the tests are actually running, we can start monitoring
         # 0x6000. 0x00 means success, 0x01 - 0x7F means error, 0x80 and higher means running
         while nes._memory_bus.read_byte(0x6000) >= 0x80:
-            nes._cpu.emulate()
+            nes.emulate_once()
             nb_instructions += 1
 
         if nes.memory_bus.read_byte(0x6000) != 0:
@@ -96,6 +97,8 @@ def main():
 
         # Power cycling the emulator resets the cycle count so keep track of the number of cycles.
         nb_cycles += nes.cpu.nb_cycles
+
+        print(f"Run #{i} completed in {time.time() - single_run_start}.")
 
         # Do a full power cycle when the tests are done executing so we can reset the memory
         # content

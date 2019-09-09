@@ -39,8 +39,15 @@ class MapperBase:
         """
         if self._is_battery_backed is False:
             for i in range(len(self._sram)):
-                # Not accurate, as there probably should be garbage in there.
+                # TODO: Pass in garbage in here.
                 self._sram[i] = 0
+
+    def configure(self, ppu):
+        """
+        Implemented by the derived classes so that they can configure PPU
+        options. Default implementation does nothing.
+        """
+        pass
 
     def read_sram_byte(self, addr):
         """
