@@ -43,6 +43,7 @@ class NROMSwitch(MapperBase):
         """
         Configures the PPU for reading the video rom memory.
         """
+        # FIXME: Incredibly naive. The VROM is bankable, so will not work for lots of games.
         if self._vrom:
             ppu.configure(self._vrom)
 

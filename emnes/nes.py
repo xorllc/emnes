@@ -10,6 +10,8 @@ from emnes.memory_bus import MemoryBus
 from emnes.cpu import CPU
 from emnes.ppu import PPU
 from emnes.mirroring_type import MirroringType
+from emnes.gamepad import Gamepad
+from emnes.zapper import Zapper
 
 
 class NES:
@@ -21,6 +23,9 @@ class NES:
     you can call the emulate method to emulate the console.
 
     You can reset the emulator by calling reset.
+
+    A gamepad is connected to port 1 and the zapper to port 2. This is
+    not configurable at the moment.
     """
 
     def __init__(self):
@@ -31,7 +36,17 @@ class NES:
         self._memory_bus = None
         self._ppu = None
         self._cpu = None
+        # Flag raised when the emulation pauses because a new frame has been rendered.
         self._frame_ready = False
+        # Flag raised when the emulation pauses to request an update to the controller
+        # inputs.
+        self._input_requested = False
+        # Counts how many cycles since the emulation was paused to update the
+        # controller status.
+        self._cycles_since_last_controller_poll = 0
+
+        self._gamepad = Gamepad()
+        self._zapper = Zapper()
 
     def load_rom(self, path_to_rom):
         """
@@ -58,6 +73,12 @@ class NES:
         """
         return self._frame_ready
 
+    def is_input_requested(self):
+        """
+        Indicates if the emulator needs an update for the inputs.
+        """
+        return self._input_requested
+
     def power(self):
         """
         Set the console in its initial state.
@@ -70,17 +91,21 @@ class NES:
         self._cartridge.configure(self._ppu)
 
         assert self._cartridge.mirroring_type in [MirroringType.Horizontal, MirroringType.Vertical]
-        # Horizontal mapping maps ppu nametable addresses:
+        # Horizontal mirroring maps ppu nametable addresses:
         # - 0x2400 to 0x2000
         # - 0x2C00 to 0x2800
-        # Horizontal mapping maps ppu nametable addresses:
+        # Vertical mirroring maps ppu nametable addresses:
         # - 0x2800 to 0x2000
         # - 0x2C00 to 0x2400
+        assert (
+            self._cartridge.mirroring_type == MirroringType.Vertical
+            or self._cartridge.mirroring_type == MirroringType.Horizontal
+        )
         self._ppu.set_mirroring_options(
             0xF7FF if self._cartridge.mirroring_type == MirroringType.Vertical else 0xFBFF
         )
 
-        self._memory_bus = MemoryBus(self._cartridge, self._ppu)
+        self._memory_bus = MemoryBus(self._cartridge, self._ppu, self._gamepad, self._zapper)
         self._cpu = CPU(self._ppu, self._memory_bus)
 
     def reset(self):
@@ -99,17 +124,28 @@ class NES:
         # PPU.emulate_once is the most invoked, PPU._render_pixel is the third.
         cycles_before = self._cpu.nb_cycles
         self._frame_ready = False
+        self._input_requested = False
         self._cpu.emulate()
-        for i in range(self._cpu.nb_cycles - cycles_before):
+        nb_cycles = self._cpu.nb_cycles - cycles_before
+
+        self._cycles_since_last_controller_poll += nb_cycles
+        if self._cycles_since_last_controller_poll > 10000:
+            self._input_requested = True
+            self._cycles_since_last_controller_poll = 0
+
+        for i in range(nb_cycles):
             self._ppu.emulate_once()
             self._ppu.emulate_once()
             self._ppu.emulate_once()
+
+        self._zapper.update_light_state(self._ppu.pixels)
 
     def emulate(self):
         """
         Emulates until the emulator has rendered a complete frame.
         """
         self._frame_ready = False
+        self._input_requested = False
         while not self._frame_ready:
             cycles_before = self._cpu.nb_cycles
             self._cpu.emulate()
@@ -121,10 +157,22 @@ class NES:
             # and then emulate the PPU accordingly. This isn't as precise
             # as the real hardware, but it's hopefully a good balance between
             # accuracy and speed for a Python based interpreter.
-            for i in range(self._cpu.nb_cycles - cycles_before):
+            nb_cycles = self._cpu.nb_cycles - cycles_before
+
+            # Every 10,000 CPU cycles we'll update the controller states,
+            # so that's roughly 190 times per second, which means we get about
+            # 3 updates per frame, allowing sub frame input updates.
+            self._cycles_since_last_controller_poll += nb_cycles
+            if self._cycles_since_last_controller_poll > 10000:
+                self._input_requested = True
+                self._cycles_since_last_controller_poll = 0
+
+            for i in range(nb_cycles):
                 self._ppu.emulate_once()
                 self._ppu.emulate_once()
                 self._ppu.emulate_once()
+
+            self._zapper.update_light_state(self._ppu.pixels)
 
     @property
     def cartridge(self):
@@ -153,3 +201,17 @@ class NES:
         Access the PPU.
         """
         return self._ppu
+
+    @property
+    def gamepad(self):
+        """
+        Access the gamepad connected to port 1.
+        """
+        return self._gamepad
+
+    @property
+    def zapper(self):
+        """
+        Access the Zapper connected to port 2.
+        """
+        return self._zapper

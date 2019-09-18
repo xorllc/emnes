@@ -211,6 +211,10 @@ class EmulatorBase:
                     if self._update_window() is False:
                         break
 
+            if self._nes.is_input_requested():
+                if self._read_inputs() is False:
+                    break
+
         emulation_length = time.time() - emulation_start
         if self._nb_frames_to_render is not None:
             print(
@@ -220,6 +224,12 @@ class EmulatorBase:
             )
         print("Emulator closed on cycle:", self._nes.cpu.nb_cycles)
         print("PPU output MD5:", hashlib.md5(self._nes.ppu.pixels).hexdigest())
+
+    def _read_inputs(self):
+        """
+        Reads inputs and updates the controller state.
+        """
+        pass
 
 
 if __name__ == "__main__":
