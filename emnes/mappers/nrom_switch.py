@@ -17,35 +17,33 @@ class NROMSwitch(MapperBase):
     - 32kb of memory mapped once
     """
 
-    __slots__ = ["_rom", "_vrom", "_address_mask"]
+    __slots__ = ["_address_mask"]
 
     def __init__(self, header, data):
         """
         :param emnes.CartridgeHeader header: Header for the cartridge.
         :param bytearray data: Cartridge data
         """
-        super().__init__(header)
+        super().__init__(header, data)
         # If there is only one bank, the higher area
         # will simply mirror data in the lower area.
         # as such, we're only concerned with the first 0x3FFF
 
         if header.nb_rom_banks == 1:
             self._address_mask = 0x3FFF
-            vrom_start = 16 * 1024
         else:
             self._address_mask = 0xFFFF
-            vrom_start = 32 * 1024
 
-        self._rom = data[:vrom_start]
-        self._vrom = data[vrom_start:]
-
-    def configure(self, ppu):
+    def configure(self):
         """
         Configures the PPU for reading the video rom memory.
         """
-        # FIXME: Incredibly naive. The VROM is bankable, so will not work for lots of games.
         if self._vrom:
-            ppu.configure(self._vrom)
+            # FIXME: Incredibly naive. The VROM is bankable, so will not work
+            # forever.
+            self._vrom_switch_handler(self._vrom)
+        else:
+            super().configure()
 
     def write_rom_byte(self, addr, data):
         """

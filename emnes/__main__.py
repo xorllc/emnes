@@ -57,6 +57,13 @@ class Emulator(EmulatorBase):
         sdl2.SDL_CONTROLLER_BUTTON_DPAD_RIGHT: "right",
     }
 
+    _save_state_keys = [
+        sdl2.SDL_SCANCODE_1,
+        sdl2.SDL_SCANCODE_2,
+        sdl2.SDL_SCANCODE_3,
+        sdl2.SDL_SCANCODE_4,
+    ]
+
     def _prepare_window(self):
         """
         Shows the Window
@@ -169,6 +176,12 @@ class Emulator(EmulatorBase):
                     setattr(
                         self._nes.gamepad, self._keys_to_gamepad[event.key.keysym.scancode], False
                     )
+                if event.key.keysym.scancode in self._save_state_keys:
+                    slot_index = self._save_state_keys.index(event.key.keysym.scancode) + 1
+                    if event.key.keysym.mod & sdl2.KMOD_SHIFT:
+                        self._save_state(slot_index)
+                    else:
+                        self._load_state(slot_index)
             # Game controller handling.
             elif event.type == sdl2.SDL_CONTROLLERDEVICEADDED:
                 # When controller is detected, add it!

@@ -67,6 +67,11 @@ If you have a Xbox One-like controller connected, you can use it to control the 
 
 The zapper is controlled with the mouse. Aim with the cursor and trigger with the left mouse button.
 
+There are also a couple of quality of life shortcuts:
+
+1-4: Load state 1-4
+Shift 1-4: Save state 1-4
+
 
 ## Documentation
 

@@ -387,7 +387,7 @@ class PPUOamData:
 
         :param int value: Value to write.
         """
-        self._ppu._oam_memory[self._ppu._ppuoamaddr.addr] = value
+        self._ppu._oam_memory[self._ppu._ppuoamaddr.addr & 0xFF] = value
         self._ppu._ppuoamaddr.addr += 1
 
     def read(self):
@@ -398,7 +398,7 @@ class PPUOamData:
         """
         # TODO: Implement dirty reads when cycle_x is <= 64
         # https://wiki.nesdev.com/w/index.php/PPU_sprite_evaluation
-        return self._ppu._oam_memory[self._ppu._ppuoamaddr.addr & 64]
+        return self._ppu._oam_memory[self._ppu._ppuoamaddr.addr & 0xFF]
 
 
 class PPUScroll:
@@ -618,6 +618,28 @@ class PPU:
         # Callback invoked when a new frame is ready.
         "_frame_ready_cb",
     ]
+
+    def __getstate__(self):
+        """
+        Captures the state of the PPU. Used when pickling.
+
+        :returns: `dict` of the state.
+        """
+        return {
+            k: getattr(self, k)
+            for k in self.__slots__
+            if k not in ["_pixels", "_pattern_table_memory"]
+        }
+
+    def __setstate__(self, state):
+        """
+        Restores the state of the PPU. Used when unpickling.
+
+        :param dict state: State captured by __getstate__.
+        """
+        for k, v in state.items():
+            setattr(self, k, v)
+        self._pixels = bytearray(256 * 240)
 
     # IDEA: Maybe we should turn most data from this class into a bytearray so we have something
     # we could pass down to a cython-based rendering loop.
@@ -855,7 +877,7 @@ class PPU:
         """
         self._nametable_mirroring_mask = mask
 
-    def configure(self, pattern_table_memory=None):
+    def set_pattern_table_memory(self, pattern_table_memory):
         """
         Configure various aspect of the PPU.
 

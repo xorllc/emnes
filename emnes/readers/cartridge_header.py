@@ -5,6 +5,8 @@
 #
 # See LICENSE at the root of this project for more info.
 
+import os
+
 
 class CartridgeHeader:
     """
@@ -12,6 +14,7 @@ class CartridgeHeader:
     """
 
     __slots__ = [
+        "_path",
         "_nb_rom_banks",
         "_nb_vrom_banks",
         "_is_battery_backed",
@@ -22,6 +25,7 @@ class CartridgeHeader:
 
     def __init__(
         self,
+        path,
         nb_rom_banks,
         nb_vrom_banks,
         is_battery_backed,
@@ -38,12 +42,20 @@ class CartridgeHeader:
             For cartridge with hard-wired mirroring.
         :param int nb_sram_banks: Number of SRAM banks in the cartridge.
         """
+        self._path = path
         self._nb_rom_banks = nb_rom_banks
         self._nb_vrom_banks = nb_vrom_banks
         self._is_battery_backed = is_battery_backed
         self._has_trainer = has_trainer
         self._mirroring_type = mirroring_type
         self._nb_sram_banks = nb_sram_banks
+
+    @property
+    def path(self):
+        """
+        Path to the ROM.
+        """
+        return self._path
 
     @property
     def nb_rom_banks(self):

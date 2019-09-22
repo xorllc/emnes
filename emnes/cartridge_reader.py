@@ -5,6 +5,8 @@
 #
 # See LICENSE at the root of this project for more info.
 
+import os
+
 from emnes.mirroring_type import MirroringType
 from emnes.readers.cartridge_header import CartridgeHeader
 from emnes.mappers import MapperRegistry
@@ -25,16 +27,18 @@ class CartridgeReader:
         :returns: An instance of :class:`Cartridge`
         """
         with open(path_to_rom, "rb") as fh:
-            return cls.load_from_data(fh.read())
+            return cls.load_from_data(fh.read(), path_to_rom)
 
     @classmethod
-    def load_from_data(cls, cart_data):
+    def get_cart_sections(cls, cart_data, path):
         """
-        Load a cartridge from an array of bytes.
+        Reads a cartridge and return different information from different
+        sections.
 
-        :param bytearray cart_data:
+        :param bytes cart_data: Data read from the ROM.
+        :param str path: Path of the rom.
 
-        :returns: A :class:`MapperBase` derived object.
+        :returns: Tuple of (CartridgeHeader, the mapper index, the ROM data)
         """
         nes_string = cart_data[0:4]
 
@@ -69,6 +73,7 @@ class CartridgeReader:
         rom_data = cart_data[rom_data_start:]
 
         header = CartridgeHeader(
+            path,
             nb_rom_banks,
             nb_vrom_banks,
             is_battery_backed,
@@ -77,6 +82,16 @@ class CartridgeReader:
             nb_sram_banks,
         )
 
-        mapper = MapperRegistry.create_mapper(mapper_number, header, rom_data)
+        return header, mapper_number, rom_data
 
-        return mapper
+    @classmethod
+    def load_from_data(cls, cart_data, path=None):
+        """
+        Load a cartridge from an array of bytes.
+
+        :param bytearray cart_data:
+
+        :returns: A :class:`MapperBase` derived object.
+        """
+        header, mapper_number, rom_data = cls.get_cart_sections(cart_data, path)
+        return MapperRegistry.create_mapper(mapper_number, header, rom_data)

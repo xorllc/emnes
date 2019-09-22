@@ -90,6 +90,7 @@ def test_blargg(rom_location):
         ("roms/cpu/timing/cpu_timing_test.nes", 19652633, "d1a71ada4584b8048d77517ce8cc1f01"),
         ("roms/ppu/blargg_ppu_tests/vram_access.nes", 1784334, "0941a56e4c62c6026264952a9bfaea35"),
         ("roms/ppu/blargg_ppu_tests/palette_ram.nes", 1784334, "0941a56e4c62c6026264952a9bfaea35"),
+        ("roms/ppu/blargg_ppu_tests/sprite_ram.nes", 1784334, "0941a56e4c62c6026264952a9bfaea35"),
     ],
 )
 def test_run_and_compare_output(rom_location, nb_cycles, ppu_md5):

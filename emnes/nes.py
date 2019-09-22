@@ -88,7 +88,8 @@ class NES:
         # fixing it.
         # CPU -> MemoryBus -> PPU -> CPU
         self._ppu = PPU(self._set_frame_ready)
-        self._cartridge.configure(self._ppu)
+        self._cartridge.set_handlers(self._ppu.set_pattern_table_memory)
+        self._cartridge.configure()
 
         assert self._cartridge.mirroring_type in [MirroringType.Horizontal, MirroringType.Vertical]
         # Horizontal mirroring maps ppu nametable addresses:
@@ -97,10 +98,7 @@ class NES:
         # Vertical mirroring maps ppu nametable addresses:
         # - 0x2800 to 0x2000
         # - 0x2C00 to 0x2400
-        assert (
-            self._cartridge.mirroring_type == MirroringType.Vertical
-            or self._cartridge.mirroring_type == MirroringType.Horizontal
-        )
+        # FIXME: This needs to be refactored at some point.
         self._ppu.set_mirroring_options(
             0xF7FF if self._cartridge.mirroring_type == MirroringType.Vertical else 0xFBFF
         )

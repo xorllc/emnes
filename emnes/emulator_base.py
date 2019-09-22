@@ -14,6 +14,8 @@ Options:
                         up front.
 """
 
+import os
+import pickle
 import sys
 import time
 import ctypes
@@ -169,6 +171,42 @@ class EmulatorBase:
         finally:
             if self._is_rendering:
                 self._finalize_window()
+
+    def _state_file(self, slot_index):
+        """
+        Computes the file location for the state file with the specified index.
+
+        :param int slot_index: Index for which to compute the slot index.
+
+        :returns: Path to the current rom's save state file for the given index.
+        """
+        return os.path.expanduser(f"~/.emnes/{self._nes.cartridge.name}.state_{slot_index}")
+
+    def _save_state(self, slot_index):
+        """
+        Saves the emulator state to disk into the given slot.
+
+        :param int slot_index: Index of the slot to save into.
+        """
+        path = self._state_file(slot_index)
+        folder = os.path.dirname(path)
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        with open(path, "wb") as f:
+            pickle.dump(self._nes, f)
+
+    def _load_state(self, slot_index):
+        """
+        Restores the emulator state from disk from the given slot.
+
+        :param int slot_index: Index of the slot to load from.
+        """
+        # If there is no state to load for this slot, ignore the call.
+        if not os.path.exists(self._state_file(slot_index)):
+            return
+
+        with open(self._state_file(slot_index), "rb") as f:
+            self._nes = pickle.load(f)
 
     def _main_loop(self):
         """

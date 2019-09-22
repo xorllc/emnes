@@ -19,8 +19,6 @@ class MMC1(MapperBase):
     """
 
     __slots__ = [
-        "_data",
-        "_nb_rom_banks",
         "_8000_bank_offset",
         "_C000_bank_offset",
         # We can only write to a single register at a time, one bit at a
@@ -36,9 +34,8 @@ class MMC1(MapperBase):
             cartridge.
         :param bytearray: ROM data.
         """
-        super().__init__(header)
-        self._data = data
-        self._nb_rom_banks = header.nb_rom_banks
+        super().__init__(header, data)
+
         self._register_value = 0b10000
         self._is_16kb_switching = False
 
@@ -131,6 +128,6 @@ class MMC1(MapperBase):
         # because using [] involves a function call, which is a lot slower
         # than an IF + a comparison in Python.
         if addr >= 0x4000:
-            return self._data[self._C000_bank_offset + addr]
+            return self._rom[self._C000_bank_offset + addr]
         else:
-            return self._data[self._8000_bank_offset + addr]
+            return self._rom[self._8000_bank_offset + addr]

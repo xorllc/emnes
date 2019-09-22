@@ -89,6 +89,15 @@ class CPU:
         )
         self._nb_cycles = 0
 
+        self._interrupt_state = InterruptState.NONE
+
+        self._init_opcodes()
+
+    def _init_opcodes(self):
+        """
+        Initializes the opcodes array.
+        """
+
         # Allocate room for all the opcodes.
         # Prefill the array with unknown opcodes functors. We'll them replace
         # them with real instructions.
@@ -314,7 +323,26 @@ class CPU:
         self._opcodes[0xE1] = lambda: self._sbc(self._indirect_x())
         self._opcodes[0xF1] = lambda: self._sbc(self._indirect_y())
 
-        self._interrupt_state = InterruptState.NONE
+    def __getstate__(self):
+        """
+        Captures the state of the CPU. Used when pickling.
+
+        :returns: `dict` of the state.
+        """
+        # The opcodes list can't be pickled because _opcodes are lambdas which are not
+        # pickle-able it seems.
+        return {slot: getattr(self, slot) for slot in self.__slots__ if slot != "_opcodes"}
+
+    def __setstate__(self, state):
+        """
+        Restores the state of the CPU. Use when unpickling.
+
+        :param dict state: State captured by __getstate__.
+        """
+        for k, v in state.items():
+            setattr(self, k, v)
+        # Restore opcodes array that couldn't be pickled.
+        self._init_opcodes()
 
     def emulate(self):
         """
