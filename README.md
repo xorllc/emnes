@@ -8,6 +8,10 @@ Why another NES emulator? There are so many after all? Why not help a team worki
 - I believe documentation is one of the most important skill for a developer and I want to get better at it. So I want to craft a documentation that is easy to read and publish.
 - But most importantly, I'm doing this for fun.
 
+## Disclaimer
+
+I write this emulator for fun and learning, not to play games I do not own. As such, all the games I use for my tests I actually own a physical copy for. I do not condone piracy.
+
 # Running the emulator
 
 1. Clone the repo
