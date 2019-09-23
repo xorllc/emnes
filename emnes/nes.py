@@ -88,7 +88,9 @@ class NES:
         # fixing it.
         # CPU -> MemoryBus -> PPU -> CPU
         self._ppu = PPU(self._set_frame_ready)
-        self._cartridge.set_handlers(self._ppu.set_pattern_table_memory)
+        self._cartridge.set_handlers(
+            self._ppu.set_pattern_table_memory, self._ppu.set_mirroring_options
+        )
         self._cartridge.configure()
 
         assert self._cartridge.mirroring_type in [MirroringType.Horizontal, MirroringType.Vertical]

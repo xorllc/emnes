@@ -33,6 +33,7 @@ class MapperBase:
         # Whenever the console needs to switch VROM memory bank, it will
         # invoke this method to update the PPU.
         "_vrom_switch_handler",
+        "_mirroring_handler",
     ]
 
     def __init__(self, header, data):
@@ -50,13 +51,14 @@ class MapperBase:
         self._nb_sram_banks = header.nb_sram_banks
         self._set_rom_and_vrom(data)
 
-    def set_handlers(self, vrom_switch_handler):
+    def set_handlers(self, vrom_switch_handler, mirroring_handler):
         """
         Sets the handlers required to update the other
         parts of the NES when some state change inside the
         mapper.
         """
         self._vrom_switch_handler = vrom_switch_handler
+        self._mirroring_handler = mirroring_handler
 
     def __getstate__(self):
         """
