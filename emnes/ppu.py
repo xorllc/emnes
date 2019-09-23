@@ -37,8 +37,6 @@ class PPUCtrl:
 
         :param int value: Byte to write.
         """
-        # TODO: This isn't used anywhere right now, which is surely going to lead
-        # to video glitches down the road. We'll look into it at that point.
         self.base_nametable_address = self.BASE_NAMETABLE_ADDRESSES[value & 0x3]
         self.vram_io_addr_inc = 32 if value & 0b100 else 1
         self.sprite_table_addr = 0x1000 if value & 0b1000 else 0x0000
@@ -50,8 +48,8 @@ class PPUCtrl:
         # Insert the two least significant bits into bits 10-11.
         # See: http://wiki.nesdev.com/w/index.php/PPU_scrolling#Register_controls
         self._ppu._tmp_vram_address = (self._ppu._tmp_vram_address & 0b111001111111111) | (
-            value & 0x3
-        ) << 10
+            (value & 0x3) << 10
+        )
 
     def __format__(self, style):
         """
@@ -1115,10 +1113,39 @@ class PPU:
         self._cycle_x += 1
         self._state = self.STORE_ATTRIBUTE
 
-    def _store_attribute(self):
-        """
-        Store the attribute that was read.
-        """
+    def get_background(self, pixels):
+        for page in [0x2000, 0x2800]:
+            if page == 0x2000:
+                offset = 0
+            else:
+                offset = 256
+            for y in range(30):
+                for x in range(32):
+                    attribute_index = (y // 4) * 8 + x // 4
+                    nametable_byte = self._memory[page + y * 32 + x]
+                    attribute_byte = self._read_attribute_byte_for(page, x, y)
+                    for fine_y in range(8):
+                        yy = y * 8 + fine_y
+                        pixel_addr = self._ppuctrl.bg_table_addr | fine_y | (nametable_byte << 4)
+                        pixel_addr_2 = pixel_addr | 0b1000
+                        byte1 = self._pattern_table_memory[pixel_addr]
+                        byte2 = self._pattern_table_memory[pixel_addr_2]
+                        for fine_x in range(8):
+                            xx = x * 8 + fine_x
+
+                            bg_color_index = ((byte1 & 0x80) >> 7) | ((byte2 & 0x80) >> 6)
+
+                            if bg_color_index:
+                                color = self._memory[
+                                    0x3F00 | (attribute_byte << 2) | bg_color_index
+                                ]
+                            else:
+                                color = self._memory[0x3F00]
+                            pixels[offset + yy * 512 + xx] = color
+                            byte1 <<= 1
+                            byte2 <<= 1
+
+    def _read_attribute_byte_for(self, nametable_select, coarse_x, coarse_y):
         # The low 12 bits of the attribute address are composed in the following way:
         #
         # NN 1111 YYY XXX
@@ -1129,11 +1156,9 @@ class PPU:
         #
         # All credit for this explainer and the following line of code goes to:
         # https://wiki.nesdev.com/w/index.php/PPU_scrolling#Tile_and_attribute_fetching
+
         attribute_attr = (
-            0x23C0
-            | (self._vram_address & 0x0C00)
-            | ((self._vram_address >> 4) & 0x38)
-            | ((self._vram_address >> 2) & 0x07)
+            0x23C0 | nametable_select | ((coarse_y >> 2 << 3) & 0x38) | coarse_x >> 2
         ) & self._nametable_mirroring_mask
 
         attribute = self._memory[attribute_attr]
@@ -1158,16 +1183,25 @@ class PPU:
         # This will remap values to 00 (0), 01 (1), 10 (2) or 11 (3). Shifting
         # right will yield 0 or 1, helping us chose in which horizontal and vertical
         # half of the 4x4 region this tile is.
-        is_right = bool((self.coarse_x % 4) >> 1)
-        is_bottom = bool((self.coarse_y % 4) >> 1)
+        is_right = bool((coarse_x % 4) >> 1)
+        is_bottom = bool((coarse_y % 4) >> 1)
         if is_right is False and is_bottom is False:
-            self._attribute_bytes[self._current_tile_fetched] = attribute & 0b11
+            return attribute & 0b11
         elif is_right and is_bottom is False:
-            self._attribute_bytes[self._current_tile_fetched] = attribute >> 2 & 0b11
+            return attribute >> 2 & 0b11
         elif is_right is False and is_bottom:
-            self._attribute_bytes[self._current_tile_fetched] = attribute >> 4 & 0b11
+            return attribute >> 4 & 0b11
         else:
-            self._attribute_bytes[self._current_tile_fetched] = attribute >> 6 & 0b11
+            return attribute >> 6 & 0b11
+
+    def _store_attribute(self):
+        """
+        Store the attribute that was read.
+        """
+
+        self._attribute_bytes[self._current_tile_fetched] = self._read_attribute_byte_for(
+            self._vram_address & 0x0C00, self.coarse_x, self.coarse_y
+        )
 
         # Render the pixel
         if self._cycle_x <= 256:

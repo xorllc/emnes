@@ -96,7 +96,7 @@ pal = [
 ]
 
 
-def fill(rgb_buffer, palette_buffer):
+def fill(rgb_buffer, palette_buffer, width, height):
     """
     Convert palette buffer into RGB buffer.
 
@@ -105,8 +105,8 @@ def fill(rgb_buffer, palette_buffer):
     """
     rgba_index = 0
     palette_index = 0
-    for y in range(240):
-        for x in range(256):
+    for y in range(height):
+        for x in range(width):
             color_index = palette_buffer[palette_index]
             color = pal[color_index]
 

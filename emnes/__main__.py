@@ -72,7 +72,7 @@ class Window:
         self._ctypes_img_data = (ctypes.c_byte * (nb_pixels * 3)).from_buffer(self._img_data)
 
         # Fills the image black.
-        fill(self._img_data, bytearray(nb_pixels))
+        fill(self._img_data, bytearray(nb_pixels), *self._resolution)
         try:
             sdl2.SDL_LockSurface(self._surface)
             ctypes.memmove(
@@ -100,7 +100,7 @@ class Window:
             # texture. This wouldn't give us much of a speed boost however. The entire
             # is_rendering block is at most about 0.02 second long. There are much
             # bigger problems to fix.
-            fill(self._img_data, pixels)
+            fill(self._img_data, pixels, *self._resolution)
             sdl2.SDL_memcpy(
                 pixels_ptr,
                 ctypes.addressof(self._ctypes_img_data),
@@ -111,6 +111,16 @@ class Window:
 
         sdl2.SDL_RenderCopy(self._renderer, self._texture, None, None)
         sdl2.SDL_RenderPresent(self._renderer)
+
+
+class PatternTableWindow(Window):
+    def __init__(self):
+        super().__init__("Pattern tables", (512, 240), (1024, 480), False)
+        self._pixels = bytearray(512 * 240)
+
+    def update_window(self, ppu):
+        ppu.get_background(self._pixels)
+        super().update_window(self._pixels)
 
 
 class Emulator(EmulatorBase):
@@ -159,7 +169,7 @@ class Emulator(EmulatorBase):
         sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER)
 
         # Width in the monitor's pixel of a single pixel from the emulator.
-        self._window_multiplier = 4
+        self._window_multiplier = 3
 
         # Creates a RGB dialog.
         self._window = Window(
@@ -169,11 +179,15 @@ class Emulator(EmulatorBase):
             self._vsync_enabled,
         )
 
+        # self._pattern_table_window = PatternTableWindow()
+
     def _update_window(self):
         """
         Draws the current frame and processes inputs.
         """
         self._window.update_window(self._nes.ppu.pixels)
+        # self._pattern_table_window.update_window(self._nes.ppu)
+
         # Run the event pump to know if we should quit the app.
         return self._event_pump()
 
