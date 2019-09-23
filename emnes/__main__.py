@@ -23,7 +23,94 @@ import sdl2.ext
 from docopt import docopt
 
 from emnes import NES
-from emnes.emulator_base import EmulatorBase
+from emnes.emulator_base import EmulatorBase, fill
+
+
+class Window:
+    def __init__(self, title, internal_resolution, actual_resolution, enable_vsync):
+
+        self._window = sdl2.ext.Window(title, size=actual_resolution)
+
+        self._window.show()
+        self._renderer = sdl2.SDL_CreateRenderer(
+            self._window.window,
+            -1,
+            sdl2.SDL_RENDERER_ACCELERATED
+            | (sdl2.SDL_RENDERER_PRESENTVSYNC if enable_vsync is False else 0),
+        )
+
+        # Creates a surface to draw on in the dialog
+        self._surface = sdl2.SDL_CreateRGBSurface(
+            0,
+            internal_resolution[0],
+            internal_resolution[1],
+            32,
+            0,
+            0x00FF0000,
+            0x0000FF00,
+            0x000000FF,
+            0xFF000000,
+        )
+
+        # Creates a texture which we will apply on the surface/
+        self._texture = sdl2.SDL_CreateTexture(
+            self._renderer,
+            sdl2.SDL_PIXELFORMAT_RGB24,
+            sdl2.SDL_TEXTUREACCESS_STREAMING,
+            internal_resolution[0],
+            internal_resolution[1],
+        )
+
+        self._resolution = internal_resolution
+
+        nb_pixels = internal_resolution[0] * internal_resolution[1]
+
+        # Array of RGB values that will be filled
+        self._img_data = bytearray(nb_pixels * 3)
+
+        # Cast into a ctypes compatible structure so we can pass the bytearray to SDL.
+        self._ctypes_img_data = (ctypes.c_byte * (nb_pixels * 3)).from_buffer(self._img_data)
+
+        # Fills the image black.
+        fill(self._img_data, bytearray(nb_pixels))
+        try:
+            sdl2.SDL_LockSurface(self._surface)
+            ctypes.memmove(
+                self._surface.contents.pixels,
+                ctypes.addressof(self._ctypes_img_data),
+                nb_pixels * 3,
+            )
+
+        finally:
+            sdl2.SDL_UnlockSurface(self._surface)
+
+        sdl2.SDL_UpdateTexture(
+            self._texture, None, self._surface.contents.pixels, internal_resolution[0] * 3
+        )
+
+    def update_window(self, pixels):
+        pixels_ptr = ctypes.c_void_p()
+        pitch = ctypes.c_int32(self._resolution[0] * 3)
+        try:
+            sdl2.SDL_LockTexture(self._texture, None, ctypes.byref(pixels_ptr), ctypes.byref(pitch))
+
+            # ctypes is too slow on PyPy to directly update pixels, so fill an array
+            # in Python and then memcpy it.
+            # IDEA: Maybe we could use Cython here to copy the bytes directly into the
+            # texture. This wouldn't give us much of a speed boost however. The entire
+            # is_rendering block is at most about 0.02 second long. There are much
+            # bigger problems to fix.
+            fill(self._img_data, pixels)
+            sdl2.SDL_memcpy(
+                pixels_ptr,
+                ctypes.addressof(self._ctypes_img_data),
+                self._resolution[0] * self._resolution[1] * 3,
+            )
+        finally:
+            sdl2.SDL_UnlockTexture(self._texture)
+
+        sdl2.SDL_RenderCopy(self._renderer, self._texture, None, None)
+        sdl2.SDL_RenderPresent(self._renderer)
 
 
 class Emulator(EmulatorBase):
@@ -75,72 +162,18 @@ class Emulator(EmulatorBase):
         self._window_multiplier = 4
 
         # Creates a RGB dialog.
-        self._window = sdl2.ext.Window(
-            "EmNES", size=(256 * self._window_multiplier, 240 * self._window_multiplier)
+        self._window = Window(
+            "EmNES",
+            (256, 240),
+            (256 * self._window_multiplier, 240 * self._window_multiplier),
+            self._vsync_enabled,
         )
-        self._window.show()
-        self._renderer = sdl2.SDL_CreateRenderer(
-            self._window.window,
-            -1,
-            sdl2.SDL_RENDERER_ACCELERATED
-            | (sdl2.SDL_RENDERER_PRESENTVSYNC if self._vsync_enabled is False else 0),
-        )
-
-        # Creates a surface to draw on in the dialog
-        self._surface = sdl2.SDL_CreateRGBSurface(
-            0, 256, 240, 32, 0, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000
-        )
-
-        # Creates a texture which we will apply on the surface/
-        self._texture = sdl2.SDL_CreateTexture(
-            self._renderer, sdl2.SDL_PIXELFORMAT_RGB24, sdl2.SDL_TEXTUREACCESS_STREAMING, 256, 240
-        )
-
-        # Array of RGB values that will be filled
-        self._img_data = bytearray(256 * 240 * 3)
-
-        # Cast into a ctypes compatible structure so we can pass the bytearray to SDL.
-        self._ctypes_img_data = (ctypes.c_byte * (256 * 240 * 3)).from_buffer(self._img_data)
-
-        # Fills the image black.
-        self._fill(self._img_data, bytearray(256 * 240))
-        try:
-            sdl2.SDL_LockSurface(self._surface)
-            ctypes.memmove(
-                self._surface.contents.pixels,
-                ctypes.addressof(self._ctypes_img_data),
-                256 * 240 * 3,
-            )
-
-        finally:
-            sdl2.SDL_UnlockSurface(self._surface)
-
-        sdl2.SDL_UpdateTexture(self._texture, None, self._surface.contents.pixels, 256 * 3)
 
     def _update_window(self):
         """
         Draws the current frame and processes inputs.
         """
-        keep_running = True
-        pixels = ctypes.c_void_p()
-        pitch = ctypes.c_int32(256 * 3)
-        try:
-            sdl2.SDL_LockTexture(self._texture, None, ctypes.byref(pixels), ctypes.byref(pitch))
-
-            # ctypes is too slow on PyPy to directly update pixels, so fill an array
-            # in Python and then memcpy it.
-            # IDEA: Maybe we could use Cython here to copy the bytes directly into the
-            # texture. This wouldn't give us much of a speed boost however. The entire
-            # is_rendering block is at most about 0.02 second long. There are much
-            # bigger problems to fix.
-            self._fill(self._img_data, self._nes.ppu.pixels)
-            sdl2.SDL_memcpy(pixels, ctypes.addressof(self._ctypes_img_data), 256 * 240 * 3)
-        finally:
-            sdl2.SDL_UnlockTexture(self._texture)
-
-        sdl2.SDL_RenderCopy(self._renderer, self._texture, None, None)
-        sdl2.SDL_RenderPresent(self._renderer)
-
+        self._window.update_window(self._nes.ppu.pixels)
         # Run the event pump to know if we should quit the app.
         return self._event_pump()
 

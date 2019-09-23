@@ -96,6 +96,27 @@ pal = [
 ]
 
 
+def fill(rgb_buffer, palette_buffer):
+    """
+    Convert palette buffer into RGB buffer.
+
+    :param array rgb_buffer: Array of RGB values, one byte per component.
+    :param bytearray palette_buffer: Array of pixels with one byte per pixel.
+    """
+    rgba_index = 0
+    palette_index = 0
+    for y in range(240):
+        for x in range(256):
+            color_index = palette_buffer[palette_index]
+            color = pal[color_index]
+
+            rgb_buffer[rgba_index] = color[0]
+            rgb_buffer[rgba_index + 1] = color[1]
+            rgb_buffer[rgba_index + 2] = color[2]
+            rgba_index += 3
+            palette_index += 1
+
+
 class EmulatorBase:
     """
     Base class of the emulator.
@@ -127,26 +148,6 @@ class EmulatorBase:
         print(f"Mapper: {cart.__class__.__name__}")
         print(f"Nb SRAM banks: {cart.nb_sram_banks}")
         print(f"Expected ROM size: {cart.expected_rom_size}")
-
-    @staticmethod
-    def _fill(rgb_buffer, palette_buffer):
-        """
-        Convert palette buffer into RGB buffer.
-
-        :param array rgb_buffer: Array of RGB values, one byte per component.
-        :param bytearray palette_buffer: Array of pixels with one byte per pixel.
-        """
-        rgba_index = 0
-        palette_index = 0
-        for y in range(240):
-            for x in range(256):
-                color = pal[palette_buffer[palette_index]]
-
-                rgb_buffer[rgba_index] = color[0]
-                rgb_buffer[rgba_index + 1] = color[1]
-                rgb_buffer[rgba_index + 2] = color[2]
-                rgba_index += 3
-                palette_index += 1
 
     def run(self):
         """
