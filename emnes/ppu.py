@@ -1114,7 +1114,7 @@ class PPU:
         self._state = self.STORE_ATTRIBUTE
 
     def get_background(self, pixels):
-        for page in [0x2000, 0x2800]:
+        for page in [0x2000, 0x2400 if self._nametable_mirroring_mask == 0xF7FF else 0x2800]:
             if page == 0x2000:
                 offset = 0
             else:

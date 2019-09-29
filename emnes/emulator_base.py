@@ -2,16 +2,17 @@
 """EmNES emulator.
 
 Usage:
-    __main__.py <path-to-rom> [--no-vsync | --no-rendering] [--nb-seconds=<n>] [--no-jit-warmup]
+    __main__.py <path-to-rom> [--no-vsync | --no-rendering] [--nb-seconds=<n>] [--no-jit-warmup] [--display-nametables]
 
 Options:
-    -h --help           Show this screen
-    --no-rendering      Runs the emulator without rendering anything on the screen.
-    --no-vsync          Disables VSync. Emulator runs as fast as possible.
-    --nb-seconds=<n>    Runs the emulation for n seconds (in emulator time) and quits.
-                        This is useful for benchmarking.
-    --no-jit-warmup     Disables JIT warmup (PyPy only). Faster game startup but poorer performance
-                        up front.
+    -h --help             Show this screen
+    --no-rendering        Runs the emulator without rendering anything on the screen.
+    --no-vsync            Disables VSync. Emulator runs as fast as possible.
+    --display-nametables  Displays all nametables.
+    --nb-seconds=<n>      Runs the emulation for n seconds (in emulator time) and quits.
+                          This is useful for benchmarking.
+    --no-jit-warmup       Disables JIT warmup (PyPy only). Faster game startup but poorer performance
+                          up front.
 """
 
 import os
@@ -163,6 +164,7 @@ class EmulatorBase:
             (int(arguments["--nb-seconds"]) * 60) if arguments["--nb-seconds"] else None
         )
         self._vsync_enabled = arguments["--no-vsync"]
+        self._display_nametables = arguments["--display-nametables"] == False
 
         # Run the emulator.
         try:

@@ -1,18 +1,4 @@
 # -*- coding: utf-8 -*-
-"""EmNES emulator.
-
-Usage:
-    __main__.py <path-to-rom> [--no-vsync | --no-rendering] [--nb-seconds=<n>] [--no-jit-warmup]
-
-Options:
-    -h --help           Show this screen
-    --no-rendering      Runs the emulator without rendering anything on the screen.
-    --no-vsync          Disables VSync. Emulator runs as fast as possible.
-    --nb-seconds=<n>    Runs the emulation for n seconds (in emulator time) and quits.
-                        This is useful for benchmarking.
-    --no-jit-warmup     Disables JIT warmup (PyPy only). Faster game startup but poorer performance
-                        up front.
-"""
 
 import sys
 import time
@@ -179,14 +165,16 @@ class Emulator(EmulatorBase):
             self._vsync_enabled,
         )
 
-        # self._pattern_table_window = PatternTableWindow()
+        # if self._display_nametables:
+        #     self._pattern_table_window = PatternTableWindow()
 
     def _update_window(self):
         """
         Draws the current frame and processes inputs.
         """
         self._window.update_window(self._nes.ppu.pixels)
-        # self._pattern_table_window.update_window(self._nes.ppu)
+        # if self._display_nametables:
+        #     self._pattern_table_window.update_window(self._nes.ppu)
 
         # Run the event pump to know if we should quit the app.
         return self._event_pump()

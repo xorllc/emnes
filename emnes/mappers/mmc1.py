@@ -85,6 +85,11 @@ class MMC1(MapperBase):
         # This controls a bunch of options for now. Later it will need to
         # be augmented to support CHROM swapping.
         if register == 0:
+            # FIXME:
+            # Mirroring should probably be computed per read/write based on the
+            # nametable base address.
+            # So when 2400 is the base, we should mirror read/write to 2000 back unto 2400 if
+            # horizontal
             self._mirroring_handler(0xF7FF if (0b11 & self._register_value) == 2 else 0xFBFF)
             self._is_low_pgrom_switching = bool(self._register_value & 0x4)
             self._is_16kb_switching = bool(self._register_value & 0x8)
