@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
+# MIT License
+#
+# Copyright (c) 2019 Jean-François Boismenu
+#
+# See LICENSE at the root of this project for more info.
+
 """EmNES emulator.
 
 Usage:
-    __main__.py <path-to-rom> [--no-vsync | --no-rendering] [--nb-seconds=<n>] [--no-jit-warmup]
+    emnes <path-to-rom> [--no-vsync | --no-rendering] [--nb-seconds=<n>] [--no-jit-warmup]
 
 Options:
     -h --help           Show this screen

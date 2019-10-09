@@ -20,4 +20,3 @@ First, we have to determine if Python is even able to run loops fast enough for 
 | Interpreter      | Time                |
 | ---------------- | ------------------- |
 | Pythonista 3.6.1 | 1.15 seconds        |
-

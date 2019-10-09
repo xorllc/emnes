@@ -10,8 +10,6 @@ strategy:
   matrix:
     Python36:
       python.version: '3.6'
-    Python37:
-      python.version: '3.7'
     PythonPyPy36:
       python.version: 'pypy3'
 
@@ -23,10 +21,19 @@ steps:
 
 - script: |
     python -m pip install --upgrade pip
-    pip install -r requirements.txt
     python -m pip install pytest pytest-azurepipelines
-  displayName: 'Install dependencies'
+  displayName: 'Install Python dependencies'
 
 - script: |
     python -m pytest -v
   displayName: 'Run tests'
+
+- script: |
+    sudo apt-get update
+    sudo apt-get install --yes libsdl2-dev
+  displayName: 'Install SDL2'
+
+- script: |
+    python -m pip install .
+    emnes --help
+  displayName: 'Test pip install'

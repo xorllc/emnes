@@ -1,18 +1,9 @@
 # -*- coding: utf-8 -*-
-"""EmNES emulator.
-
-Usage:
-    __main__.py <path-to-rom> [--no-vsync | --no-rendering] [--nb-seconds=<n>] [--no-jit-warmup]
-
-Options:
-    -h --help           Show this screen
-    --no-rendering      Runs the emulator without rendering anything on the screen.
-    --no-vsync          Disables VSync. Emulator runs as fast as possible.
-    --nb-seconds=<n>    Runs the emulation for n seconds (in emulator time) and quits.
-                        This is useful for benchmarking.
-    --no-jit-warmup     Disables JIT warmup (PyPy only). Faster game startup but poorer performance
-                        up front.
-"""
+# MIT License
+#
+# Copyright (c) 2019 Jean-François Boismenu
+#
+# See LICENSE at the root of this project for more info.
 
 import sys
 import time
@@ -215,5 +206,9 @@ class Emulator(EmulatorBase):
         sdl2.ext.quit()
 
 
-if __name__ == "__main__":
+def main():
     Emulator().run()
+
+
+if __name__ == "__main__":
+    main()
