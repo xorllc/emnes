@@ -15,7 +15,13 @@ I write this emulator for fun and learning, not to play games I do not own. As s
 # Running the emulator
 
 1. Clone the repo
-2. From the root of the repo, type `python -m emnes <path-to-a-rom>`. Launching the emulator without a rom will display a list of options.
+2. From inside the repo, type `pip install .`.
+2. Type `emnes` to launch the emulator.
+
+or
+
+1. Type `pip install git+https://github.com/jfboismenu/emnes.git@pip_install#egg=emnes`.
+2. Type `emnes` from anywhere.
 
 Here's are the command line options:
 
