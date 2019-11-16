@@ -14,6 +14,10 @@ I write this emulator for fun and learning, not to play games I do not own. As s
 
 # Running the emulator
 
+First, you need to install PyPy. The standard Python implementation is way too slow to emulate the NES. This emulator runs about 60 times faster (3fps vs 180fps) in certain scenarios. You can install PyPy3 via `pyenv` on macOS.
+
+Then,
+
 1. Clone the repo
 2. From inside the repo, type `pip install .`.
 2. Type `emnes` to launch the emulator.
