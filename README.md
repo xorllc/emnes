@@ -20,7 +20,7 @@ I write this emulator for fun and learning, not to play games I do not own. As s
 
 or
 
-1. Type `pip install git+https://github.com/jfboismenu/emnes.git@pip_install#egg=emnes`.
+1. Type `pip install git+https://github.com/jfboismenu/emnes.git#egg=emnes`.
 2. Type `emnes` from anywhere.
 
 Here's are the command line options:
