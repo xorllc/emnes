@@ -30,9 +30,6 @@ class MapperBase:
         "_has_trainer",
         "_mirroring_type",
         "_nb_sram_banks",
-        # Whenever the console needs to switch VROM memory bank, it will
-        # invoke this method to update the PPU.
-        "_vrom_switch_handler",
     ]
 
     def __init__(self, header, data):
@@ -50,13 +47,11 @@ class MapperBase:
         self._nb_sram_banks = header.nb_sram_banks
         self._set_rom_and_vrom(data)
 
-    def set_handlers(self, vrom_switch_handler):
-        """
-        Sets the handlers required to update the other
-        parts of the NES when some state change inside the
-        mapper.
-        """
-        self._vrom_switch_handler = vrom_switch_handler
+        # If the game didn't provide it's own VROM, we'll instantiate
+        # some
+        if not self._vrom:
+            self._has_rw_vrom = True
+            self._vrom = bytearray(0x2000)
 
     def __getstate__(self):
         """
@@ -91,9 +86,6 @@ class MapperBase:
             _, _, data = CartridgeReader.get_cart_sections(f.read(), self._path)
 
         self._set_rom_and_vrom(data)
-        # Set back the memory for the PPU. It didn't save it's
-        # pattern memory either.
-        self._vrom_switch_handler(self._vrom)
 
     def _set_rom_and_vrom(self, data):
         """
@@ -105,6 +97,13 @@ class MapperBase:
         self._rom = data[:vrom_start]
         if self._has_rw_vrom is False:
             self._vrom = data[vrom_start:]
+
+    def read_pattern_byte(self, addr):
+        return self._vrom[addr]
+
+    def write_pattern_byte(self, addr, value):
+        assert self._has_rw_vrom
+        self._vrom[addr] = value
 
     @property
     def name(self):
@@ -121,16 +120,6 @@ class MapperBase:
             for i in range(len(self._sram)):
                 # TODO: Pass in garbage in here.
                 self._sram[i] = 0
-
-    def configure(self):
-        """
-        Implemented by the derived classes so that they can configure PPU
-        options. Default implementation provides RW memory for the
-        console to use.
-        """
-        self._has_rw_vrom = True
-        self._vrom = bytearray(0x2000)
-        self._vrom_switch_handler(self._vrom)
 
     def read_sram_byte(self, addr):
         """

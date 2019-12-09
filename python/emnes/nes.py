@@ -89,9 +89,7 @@ class NES:
         # TODO: There's a bit of circular dependency here, we should look into
         # fixing it.
         # CPU -> MemoryBus -> PPU -> CPU
-        self._ppu = PPU(self._set_frame_ready)
-        self._cartridge.set_handlers(self._ppu.set_pattern_table_memory)
-        self._cartridge.configure()
+        self._ppu = PPU(self._set_frame_ready, self._cartridge)
 
         assert self._cartridge.mirroring_type in [MirroringType.Horizontal, MirroringType.Vertical]
         # Horizontal mirroring maps ppu nametable addresses:

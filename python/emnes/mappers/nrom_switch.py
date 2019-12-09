@@ -34,17 +34,6 @@ class NROMSwitch(MapperBase):
         else:
             self._address_mask = 0xFFFF
 
-    def configure(self):
-        """
-        Configures the PPU for reading the video rom memory.
-        """
-        if self._vrom:
-            # FIXME: Incredibly naive. The VROM is bankable, so will not work
-            # forever.
-            self._vrom_switch_handler(self._vrom)
-        else:
-            super().configure()
-
     def write_rom_byte(self, addr, data):
         """
         Does not do anything. ROM switching is not supported for this ROM type.

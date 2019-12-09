@@ -277,7 +277,7 @@ class PPUData:
 
         if addr < 0x2000:
             return_value = self._buffer
-            self._buffer = self._ppu._pattern_table_memory[addr]
+            self._buffer = self._ppu._cartridge.read_pattern_byte(addr)
         # Then 0x2000-0x2FFF is nametable memory.
         # 0x3000-0x3EFF is just a mirror of 0x2000-0x2EFF
         elif addr < 0x3EFF:
@@ -319,7 +319,7 @@ class PPUData:
 
         # Lower than 0x2000 is the pattern table memory.
         if addr < 0x2000:
-            self._ppu._pattern_table_memory[addr] = value
+            self._ppu._cartridge.write_pattern_byte(addr, value)
         # Then 0x2000-0x2FFF is nametable memory.
         # 0x3000-0x3EFF is just a mirror of 0x2000-0x2EFF
         elif addr < 0x3EFF:
@@ -582,9 +582,6 @@ class PPU:
         "_cpu",  # Used to notify of VBlank.
         "_memory_bus",  # Used to access memory.
         ########################################################################
-        # Actual different memory regions of the PPU.
-        # This represents memory 0x0000-0x1FFF
-        "_pattern_table_memory",
         # This represents memory 0x2000-0x3FFF
         "_memory",
         # This is the sprite memory.
@@ -617,6 +614,9 @@ class PPU:
         ########################################################################
         # Callback invoked when a new frame is ready.
         "_frame_ready_cb",
+        ########################################################################
+        # The NES cartridge holds the VROM used for the pattern tables.
+        "_cartridge",
     ]
 
     def __getstate__(self):
@@ -625,11 +625,7 @@ class PPU:
 
         :returns: `dict` of the state.
         """
-        return {
-            k: getattr(self, k)
-            for k in self.__slots__
-            if k not in ["_pixels", "_pattern_table_memory"]
-        }
+        return {k: getattr(self, k) for k in self.__slots__ if k not in ["_pixels"]}
 
     def __setstate__(self, state):
         """
@@ -686,11 +682,12 @@ class PPU:
                 (bit_tester & self.pattern_low) | ((bit_tester & self.pattern_high) << 1)
             ) >> selected_pixel_index
 
-    def __init__(self, frame_ready_cb=None):
+    def __init__(self, frame_ready_cb, cartridge):
         """
         Init
         """
         self._frame_ready_cb = frame_ready_cb or (lambda: None)
+        self._cartridge = cartridge
         self._cycle_x = 0
         self._cycle_y = 0
         self._written_once = False
@@ -698,7 +695,6 @@ class PPU:
 
         # TODO: Splits this into _nametables and _palette
         self._memory = bytearray(0x4000)
-        self._pattern_table_memory = bytearray(0x2000)
         self._oam_memory = bytearray(256)
 
         self._nametable_mirroring_mask = 0xFFFF
@@ -877,14 +873,6 @@ class PPU:
         """
         self._nametable_mirroring_mask = mask
 
-    def set_pattern_table_memory(self, pattern_table_memory):
-        """
-        Configure various aspect of the PPU.
-
-        :param bytes: Memory for the pattern table.
-        """
-        self._pattern_table_memory = pattern_table_memory
-
     def read_ppu_byte(self, addr):
         """
         Returns a byte from the PPU at the given address.
@@ -894,7 +882,7 @@ class PPU:
         :returns: The byte read.
         """
         if addr < 0x2000:
-            return self._pattern_table_memory[addr]
+            return self._cartridge.read_pattern_byte(addr)
         else:
             return self._memory[addr]
 
@@ -1195,9 +1183,9 @@ class PPU:
         Stores the low pattern byte for rendering later.
         """
         # Read the byte from memory.
-        self._pattern_low_bytes[self._current_tile_fetched] = self._pattern_table_memory[
+        self._pattern_low_bytes[self._current_tile_fetched] = self._cartridge.read_pattern_byte(
             self._get_pattern_addr(False)
-        ]
+        )
 
         # Render the pixel
         if self._cycle_x <= 256:
@@ -1226,9 +1214,9 @@ class PPU:
         Stores the high pattern byte for rendering later.
         """
         # Read the byte from memory.
-        self._pattern_high_bytes[self._current_tile_fetched] = self._pattern_table_memory[
+        self._pattern_high_bytes[self._current_tile_fetched] = self._cartridge.read_pattern_byte(
             self._get_pattern_addr(True)
-        ]
+        )
         # We've now fetch all this tile's data, so increment the current tile fetched
         self._current_tile_fetched += 1
 
@@ -1401,8 +1389,8 @@ class PPU:
                         )
 
                     # Loads the tile data
-                    sprite.pattern_low = self._pattern_table_memory[pattern_addr]
-                    sprite.pattern_high = self._pattern_table_memory[pattern_addr + 8]
+                    sprite.pattern_low = self._cartridge.read_pattern_byte(pattern_addr)
+                    sprite.pattern_high = self._cartridge.read_pattern_byte(pattern_addr + 8)
 
                     sprite.left = self._oam_memory[sprite_addr + 3]
 
