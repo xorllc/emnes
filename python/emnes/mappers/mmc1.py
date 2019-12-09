@@ -97,7 +97,6 @@ class MMC1(MapperBase):
             self._is_16kb_switching = bool(self._register_value & 0x8)
 
             self._mirroring_type = self._mirroring_types[self._register_value & 0b11]
-            print(self._mirroring_type)
         elif register == 1 or register == 2:
             # assert self._register_value == 0
             # print(f"{register} = {self._register_value}")

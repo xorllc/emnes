@@ -283,7 +283,7 @@ class PPUData:
         elif addr < 0x3EFF:
             return_value = self._buffer
             # TODO: We probably need to implement mirroring here!!!
-            self._buffer = self._ppu._memory[addr & 0x2FFF]
+            self._buffer = self._ppu._read_ciram(addr)
         elif addr == 0x3F10:
             return_value = self._ppu._memory[0x3F00]
             self._buffer = self._ppu._memory[addr & 0x2FFF]
@@ -323,8 +323,9 @@ class PPUData:
         # Then 0x2000-0x2FFF is nametable memory.
         # 0x3000-0x3EFF is just a mirror of 0x2000-0x2EFF
         elif addr < 0x3EFF:
+
             # TODO: We probably need to implement mirroring here!!!
-            self._ppu._memory[addr & 0x2FFF] = value
+            self._ppu._write_ciram(addr, value)
         # 3F10 is a mirror of 3F00
         elif addr == 0x3F10:
             self._ppu._memory[0x3F00] = value
@@ -584,6 +585,8 @@ class PPU:
         ########################################################################
         # This represents memory 0x2000-0x3FFF
         "_memory",
+        # This is the memory use for video.
+        "_ciram",
         # This is the sprite memory.
         "_oam_memory",
         ########################################################################
@@ -692,6 +695,7 @@ class PPU:
 
         # TODO: Splits this into _nametables and _palette
         self._memory = bytearray(0x4000)
+        self._ciram = bytearray(0x2000)
         self._oam_memory = bytearray(256)
 
         self._current_tile_fetched = 0
@@ -826,7 +830,7 @@ class PPU:
         """
         # Credit for this next line goes to
         # https://wiki.nesdev.com/w/index.php/PPU_scrolling#Tile_and_attribute_fetching
-        return 0x2000 | (self._vram_address & 0x0FFF) & self._nametable_mirroring_mask
+        return 0x2000 | (self._vram_address & 0x0FFF)
 
     def _set_cpu(self, cpu):
         """
@@ -844,6 +848,20 @@ class PPU:
     memory_bus = property(None, _set_memory_bus)
 
     _mirroring_mask = [0xFFFF, 0xFFFF, 0xFBFF, 0xF7FF]
+
+    _ciram_index = [0, 0, 11, 10]
+
+    def _read_ciram(self, addr):
+        return self._ciram[
+            (((addr >> self._ciram_index[self._cartridge.mirroring_type]) & 1) << 10)
+            | (0x3FF & addr)
+        ]
+
+    def _write_ciram(self, addr, value):
+        self._ciram[
+            (((addr >> self._ciram_index[self._cartridge.mirroring_type]) & 1) << 10)
+            | (0x3FF & addr)
+        ] = value
 
     @property
     def _nametable_mirroring_mask(self):
@@ -1076,7 +1094,7 @@ class PPU:
         Store a nametable byte.
         """
         # Read the byte from memory.
-        self._name_table_byte = self._memory[self.current_nametable_addr]
+        self._name_table_byte = self._read_ciram(self.current_nametable_addr)
 
         # Render the pixel
         if self._cycle_x <= 256:
@@ -1117,9 +1135,9 @@ class PPU:
             | (self._vram_address & 0x0C00)
             | ((self._vram_address >> 4) & 0x38)
             | ((self._vram_address >> 2) & 0x07)
-        ) & self._nametable_mirroring_mask
+        )
 
-        attribute = self._memory[attribute_attr]
+        attribute = self._read_ciram(attribute_attr)
 
         # We're now going to compute the bits to select in the attribute byte.
         # The rendered screen is divided in 4x4 tile regions. Each of those tile regions
