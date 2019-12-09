@@ -609,9 +609,6 @@ class PPU:
         # about which sprite will be in each pixel.
         "_sprite_priority",
         ########################################################################
-        # Mask applied to nametable accesses.
-        "_nametable_mirroring_mask",
-        ########################################################################
         # Callback invoked when a new frame is ready.
         "_frame_ready_cb",
         ########################################################################
@@ -696,8 +693,6 @@ class PPU:
         # TODO: Splits this into _nametables and _palette
         self._memory = bytearray(0x4000)
         self._oam_memory = bytearray(256)
-
-        self._nametable_mirroring_mask = 0xFFFF
 
         self._current_tile_fetched = 0
         self._current_tile_rendered = 0
@@ -848,6 +843,12 @@ class PPU:
     cpu = property(None, _set_cpu)
     memory_bus = property(None, _set_memory_bus)
 
+    _mirroring_mask = [0xFFFF, 0xFFFF, 0xFBFF, 0xF7FF]
+
+    @property
+    def _nametable_mirroring_mask(self):
+        return self._mirroring_mask[self._cartridge.mirroring_type]
+
     def read_byte(self, addr):
         """
         Read from PPU register.
@@ -866,12 +867,6 @@ class PPU:
         :param int value: New value of the register.
         """
         self._registers[addr & 0x7].write(value)
-
-    def set_mirroring_options(self, mask):
-        """
-        Set the mirroring to use when accessing the nametable data.
-        """
-        self._nametable_mirroring_mask = mask
 
     def read_ppu_byte(self, addr):
         """

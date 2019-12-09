@@ -15,9 +15,10 @@ class MirroringType(enum.IntEnum):
     This is used by the :class:`CartridgeHeader` class.
     """
 
-    Horizontal = 0
-    Vertical = 1
-    FourScreen = 2
+    OneScreenLower = 0
+    OneScreenUpper = 1
+    Horizontal = 2
+    Vertical = 3
 
     def __format__(self, format_spec):
         """
@@ -31,5 +32,9 @@ class MirroringType(enum.IntEnum):
             return "horizontal"
         elif self.value == self.Vertical:
             return "vertical"
+        elif self.value == self.OneScreenUpper:
+            return "one screen (upper)"
+        elif self.value == self.OneScreenLower:
+            return "one screen (lower)"
         else:
-            return "four screen"
+            raise RuntimeError(f"Unexpected mirroring value: {self.value}")

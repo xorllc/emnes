@@ -91,18 +91,6 @@ class NES:
         # CPU -> MemoryBus -> PPU -> CPU
         self._ppu = PPU(self._set_frame_ready, self._cartridge)
 
-        assert self._cartridge.mirroring_type in [MirroringType.Horizontal, MirroringType.Vertical]
-        # Horizontal mirroring maps ppu nametable addresses:
-        # - 0x2400 to 0x2000
-        # - 0x2C00 to 0x2800
-        # Vertical mirroring maps ppu nametable addresses:
-        # - 0x2800 to 0x2000
-        # - 0x2C00 to 0x2400
-        # FIXME: This needs to be refactored at some point.
-        self._ppu.set_mirroring_options(
-            0xF7FF if self._cartridge.mirroring_type == MirroringType.Vertical else 0xFBFF
-        )
-
         self._memory_bus = MemoryBus(self._cartridge, self._ppu, self._gamepad, self._zapper)
         self._cpu = CPU(self._ppu, self._memory_bus)
         self._apu = APU(self._memory_bus)

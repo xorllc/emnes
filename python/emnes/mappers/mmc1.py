@@ -6,6 +6,7 @@
 # See LICENSE at the root of this project for more info.
 
 from emnes.mappers.mapper_base import MapperBase
+from emnes.mirroring_type import MirroringType
 
 
 class MMC1(MapperBase):
@@ -26,6 +27,13 @@ class MMC1(MapperBase):
         "_register_value",
         "_is_low_pgrom_switching",
         "_is_16kb_switching",
+    ]
+
+    _mirroring_types = [
+        MirroringType.OneScreenLower,
+        MirroringType.OneScreenUpper,
+        MirroringType.Vertical,
+        MirroringType.Horizontal,
     ]
 
     def __init__(self, header, data):
@@ -87,6 +95,9 @@ class MMC1(MapperBase):
         if register == 0:
             self._is_low_pgrom_switching = bool(self._register_value & 0x4)
             self._is_16kb_switching = bool(self._register_value & 0x8)
+
+            self._mirroring_type = self._mirroring_types[self._register_value & 0b11]
+            print(self._mirroring_type)
         elif register == 1 or register == 2:
             # assert self._register_value == 0
             # print(f"{register} = {self._register_value}")
