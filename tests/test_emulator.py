@@ -55,6 +55,7 @@ def test_blargg(rom_location):
     while nes.cpu.nb_cycles < 55211018:
 
         nes.emulate_once()
+        nes.apu.samples
         if tests_are_running is False:
             tests_are_running = nes.memory_bus.read_array(0x6001, 3) == b"\xDE\xB0\x61"
             continue
@@ -73,6 +74,7 @@ def test_blargg(rom_location):
             wait_end = nes.cpu.nb_cycles + 170000
             while nes.cpu.nb_cycles < wait_end:
                 nes.emulate_once()
+                nes.apu.samples
             nes.reset()
             power_pressed = True
     else:
@@ -103,6 +105,7 @@ def test_run_and_compare_output(rom_location, nb_cycles, ppu_md5):
     nes.load_rom(test_rom)
     while nes.cpu.nb_cycles < nb_cycles:
         nes.emulate_once()
+        nes.apu.samples
     assert nes.cpu.nb_cycles == nb_cycles
     assert hashlib.md5(nes.ppu.pixels).hexdigest() == ppu_md5
 

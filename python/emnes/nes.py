@@ -9,6 +9,7 @@ from emnes.cartridge_reader import CartridgeReader
 from emnes.memory_bus import MemoryBus
 from emnes.cpu import CPU
 from emnes.ppu import PPU
+from emnes.apu import APU
 from emnes.mirroring_type import MirroringType
 from emnes.gamepad import Gamepad
 from emnes.zapper import Zapper
@@ -36,6 +37,7 @@ class NES:
         self._memory_bus = None
         self._ppu = None
         self._cpu = None
+        self._apu = None
         # Flag raised when the emulation pauses because a new frame has been rendered.
         self._frame_ready = False
         # Flag raised when the emulation pauses to request an update to the controller
@@ -105,6 +107,8 @@ class NES:
 
         self._memory_bus = MemoryBus(self._cartridge, self._ppu, self._gamepad, self._zapper)
         self._cpu = CPU(self._ppu, self._memory_bus)
+        self._apu = APU(self._memory_bus)
+        self._memory_bus.set_cpu_and_apu(self._cpu, self._apu)
 
     def reset(self):
         """
@@ -136,22 +140,25 @@ class NES:
             self._ppu.emulate_once()
             self._ppu.emulate_once()
 
+        self._apu.emulate(nb_cycles)
+
         self._zapper.update_light_state(self._ppu.pixels)
 
     def emulate(self):
         """
-        Emulates until the emulator has rendered a complete frame.
+        Emulates until the emulator has rendered a complete frame or
+        controller input should be refreshed.
         """
         self._frame_ready = False
         self._input_requested = False
         while not self._frame_ready:
             cycles_before = self._cpu.nb_cycles
             self._cpu.emulate()
-            # The correct way to emulate PPU cycles would be to emulate
+            # The correct way to emulate PPU and APU cycles would be to emulate
             # them after each CPU tick. Unfortunately, this seems like an inefficient
             # way of doing things and the performance is much much slower.
             #
-            # Instead, we'll count many cycles have passed during the instruction
+            # Instead, we'll count how many cycles have passed during the instruction
             # and then emulate the PPU accordingly. This isn't as precise
             # as the real hardware, but it's hopefully a good balance between
             # accuracy and speed for a Python based interpreter.
@@ -169,6 +176,8 @@ class NES:
                 self._ppu.emulate_once()
                 self._ppu.emulate_once()
                 self._ppu.emulate_once()
+
+            self._apu.emulate(nb_cycles)
 
             self._zapper.update_light_state(self._ppu.pixels)
 
@@ -192,6 +201,13 @@ class NES:
         Access the CPU.
         """
         return self._cpu
+
+    @property
+    def apu(self):
+        """
+        Access the APU.
+        """
+        return self._apu
 
     @property
     def ppu(self):

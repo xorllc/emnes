@@ -17,6 +17,50 @@ from emnes import NES
 from emnes.emulator_base import EmulatorBase
 
 
+class AudioBuffer:
+    def __init__(self):
+        self._audio_init()
+        self._audio_device_id = self._open_audio_device()
+
+    def _audio_init(self):
+        for i in range(sdl2.SDL_GetNumAudioDrivers()):
+            driver_name = sdl2.SDL_GetAudioDriver(i)
+            if driver_name != b"coreaudio":
+                continue
+
+            assert sdl2.SDL_AudioInit(driver_name) == 0
+            return
+        raise RuntimeError("Couldn't find core audio.")
+
+    def _open_audio_device(self):
+        desired = sdl2.SDL_AudioSpec(44100, sdl2.AUDIO_U8, 1, 1)
+        obtained = sdl2.SDL_AudioSpec(44100, sdl2.AUDIO_U8, 1, 1)
+
+        audio_device_id = sdl2.SDL_OpenAudioDevice(
+            None, False, desired, ctypes.byref(obtained), sdl2.SDL_AUDIO_ALLOW_ANY_CHANGE
+        )
+        if audio_device_id <= 0:
+            raise RuntimeError(sdl2.SDL_GetError())
+
+        sdl2.SDL_PauseAudioDevice(audio_device_id, 0)
+
+        print(f"Frequency: {obtained.freq}")
+        print(f"Channels: {obtained.channels}")
+        print(f"Format: {obtained.format}")
+        return audio_device_id
+
+    def queue_audio(self, samples):
+        samples_void_p = (ctypes.c_byte * (len(samples))).from_buffer(samples)
+        res = sdl2.SDL_QueueAudio(self._audio_device_id, ctypes.byref(samples_void_p), len(samples))
+        if res != 0:
+            raise RuntimeError(sdl2.SDL_GetError())
+
+    def sync_audio(self, max_frames_of_lag=5):
+        size = sdl2.SDL_GetQueuedAudioSize(self._audio_device_id)
+        while size >= max_frames_of_lag / 60 * 44100:
+            size = sdl2.SDL_GetQueuedAudioSize(self._audio_device_id)
+
+
 class Emulator(EmulatorBase):
     """
     SDL based emulator.
@@ -48,12 +92,13 @@ class Emulator(EmulatorBase):
         sdl2.SDL_CONTROLLER_BUTTON_DPAD_RIGHT: "right",
     }
 
-    _save_state_keys = [
-        sdl2.SDL_SCANCODE_1,
-        sdl2.SDL_SCANCODE_2,
-        sdl2.SDL_SCANCODE_3,
-        sdl2.SDL_SCANCODE_4,
-    ]
+    _audio_channel_keys = {
+        sdl2.SDL_SCANCODE_1: "pulse_1",
+        sdl2.SDL_SCANCODE_2: "pulse_2",
+        sdl2.SDL_SCANCODE_3: "triangle",
+        sdl2.SDL_SCANCODE_4: "noise",
+        sdl2.SDL_SCANCODE_5: "dmc",
+    }
 
     def _prepare_window(self):
         """
@@ -61,6 +106,9 @@ class Emulator(EmulatorBase):
         """
         sdl2.ext.init()
         sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER)
+        sdl2.SDL_Init(sdl2.SDL_INIT_AUDIO)
+
+        self._audio_buffer = AudioBuffer()
 
         # Width in the monitor's pixel of a single pixel from the emulator.
         self._window_multiplier = 4
@@ -71,10 +119,7 @@ class Emulator(EmulatorBase):
         )
         self._window.show()
         self._renderer = sdl2.SDL_CreateRenderer(
-            self._window.window,
-            -1,
-            sdl2.SDL_RENDERER_ACCELERATED
-            | (sdl2.SDL_RENDERER_PRESENTVSYNC if self._vsync_enabled is False else 0),
+            self._window.window, -1, sdl2.SDL_RENDERER_ACCELERATED
         )
 
         # Creates a surface to draw on in the dialog
@@ -112,6 +157,13 @@ class Emulator(EmulatorBase):
         """
         Draws the current frame and processes inputs.
         """
+
+        if self._vsync_enabled:
+            self._audio_buffer.sync_audio()
+            self._audio_buffer.queue_audio(self._nes.apu.samples)
+        else:
+            self._nes.apu.samples
+
         keep_running = True
         pixels = ctypes.c_void_p()
         pitch = ctypes.c_int32(256 * 3)
@@ -167,12 +219,13 @@ class Emulator(EmulatorBase):
                     setattr(
                         self._nes.gamepad, self._keys_to_gamepad[event.key.keysym.scancode], False
                     )
-                if event.key.keysym.scancode in self._save_state_keys:
-                    slot_index = self._save_state_keys.index(event.key.keysym.scancode) + 1
-                    if event.key.keysym.mod & sdl2.KMOD_SHIFT:
-                        self._save_state(slot_index)
-                    else:
-                        self._load_state(slot_index)
+                elif event.key.keysym.scancode in self._audio_channel_keys:
+                    getattr(
+                        self._nes.apu.mixer,
+                        f"toggle_{self._audio_channel_keys[event.key.keysym.scancode]}",
+                    )()
+                elif event.key.keysym.scancode == sdl2.SDL_SCANCODE_R:
+                    self._nes.reset()
             # Game controller handling.
             elif event.type == sdl2.SDL_CONTROLLERDEVICEADDED:
                 # When controller is detected, add it!

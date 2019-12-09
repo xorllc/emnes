@@ -167,7 +167,7 @@ class EmulatorBase:
         self._nb_frames_to_render = (
             (int(arguments["--nb-seconds"]) * 60) if arguments["--nb-seconds"] else None
         )
-        self._vsync_enabled = arguments["--no-vsync"]
+        self._vsync_enabled = not (arguments["--no-vsync"])
 
         # Run the emulator.
         try:
@@ -229,6 +229,8 @@ class EmulatorBase:
             start = time.time()
             while time.time() - start < 5:
                 self._nes.emulate()
+                # Pull samples out of the rendering buffer so it doesn't overflow.
+                self._nes.apu.samples
             self._nes.power()
 
         self._print_cartridge_info(self._nes.cartridge)

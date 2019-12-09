@@ -23,10 +23,9 @@ class MemoryBus:
         self._input_device_1 = input_device_1
         self._input_device_2 = input_device_2
 
-    def _set_cpu(self, cpu):
+    def set_cpu_and_apu(self, cpu, apu):
         self._cpu = cpu
-
-    cpu = property(None, _set_cpu)
+        self._apu = apu
 
     def read_byte(self, addr):
         """
@@ -47,6 +46,8 @@ class MemoryBus:
         elif addr >= 0x4020:
             self._not_implemented("Expansion ROM (0x4020-0x6000)", addr, is_read=True)
         elif addr >= 0x4000:
+            if addr <= 0x4013 or addr == 0x4015:
+                return self._apu.read_byte(addr)
             if addr == 0x4016:
                 return self._input_device_1.read()
             elif addr == 0x4017:
@@ -89,12 +90,15 @@ class MemoryBus:
         elif addr >= 0x4020:
             self._not_implemented("Expansion ROM (0x4020-0x6000)", addr, is_read=False)
         elif addr >= 0x4000:
+            if addr <= 0x4013 or addr == 0x4015:
+                self._apu.write_byte(addr, value)
             if addr == 0x4014:
                 self._cpu.dma_transfer(value)
             elif addr == 0x4016:
                 self._input_device_1.write(value)
             elif addr == 0x4017:
                 self._input_device_2.write(value)
+                self._apu.write_byte(addr, value)
             else:
                 self._memory_reg[addr - 0x4000] = value
         elif addr >= 0x2000:

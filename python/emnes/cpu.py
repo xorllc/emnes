@@ -68,7 +68,6 @@ class CPU:
             write memory.
         """
         self._memory_bus = memory_bus
-        self._memory_bus.cpu = self
         self._ppu = ppu
         self._ppu.cpu = self
 

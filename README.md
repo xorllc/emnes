@@ -2,38 +2,38 @@
 
 ## Introduction
 
-Why another NES emulator? There are so many after all? Why not help a team working on an existing one? Well, I have a couple of reasons why I want to write one myself from scratch.
+Why another NES emulator? There are so many after all? Why not help a team working on an existing one? Well, there's a couple reason why this once needed to exist.
 
-- Most emulators are written in C++. I've already written a Gameboy Emulator in C++ and I want to try my hand at writing optimized Python code.
-- I believe documentation is one of the most important skill for a developer and I want to get better at it. So I want to craft a documentation that is easy to read and publish.
-- But most importantly, I'm doing this for fun.
+- Most emulators are written in C++. I've already written a Gameboy Emulator in C++ and my weapon of choice right now is Python.
+- Documentation is one of the most important skill for a developer, so the goal of this emulator is to document as much as possible the process of emulating a console.
+- But most importantly: fun.
 
 ## Disclaimer
 
-I write this emulator for fun and learning, not to play games I do not own. As such, all the games I use for my tests I actually own a physical copy for. I do not condone piracy.
+This emulator was written for learning, not to play games I do not own. As such, all the games used during development have a physical counterpart in my collection. Please do not pirate games, even 30+ year old ones.
 
 # Running the emulator
 
-First, you need to install PyPy. The standard Python implementation is way too slow to emulate the NES. This emulator runs about 60 times faster (3fps vs 180fps) in certain scenarios. You can install PyPy3 via `pyenv` on macOS.
+The emulator requires PyPy. The standard Python implementation is way too slow to emulate the NES. This emulator runs about 60 times faster (3fps vs 180fps) in certain scenarios. You can install PyPy3 via `pyenv` on macOS.
 
 Then,
 
-1. Clone the repo
-2. From inside the repo, type `pip install .`.
-2. Type `emnes` to launch the emulator.
+1. Clone the repository.
+2. From inside the repository, type `pip install .`.
+2. Type `emnes <path-to-rom>` to launch the emulator.
 
 or
 
 1. Type `pip install git+https://github.com/jfboismenu/emnes.git#egg=emnes`.
-2. Type `emnes` from anywhere.
+2. Type `emnes <path-to-rom>` from anywhere.
 
-Here's are the command line options:
+Here are the command line options:
 
 ```
 EmNES emulator.
 
 Usage:
-    python -m emnes <path-to-rom> [--no-vsync | --no-rendering] [--nb-seconds=<n>] [--no-jit-warmup]
+    emnes <path-to-rom> [--no-vsync | --no-rendering] [--nb-seconds=<n>] [--no-jit-warmup]
 
 Options:
     -h --help           Show this screen
@@ -47,9 +47,9 @@ Options:
 
 # Controllers
 
-The controllers are hardcoded. Port 1 has a gamepad and port 2 has a zapper.
+The controllers are hard-coded. Port 1 has a game pad and port 2 has a zapper.
 
-Here are the keyboard mapping for the gamepad:
+Here are the keyboard mapping for the game pad:
 
 | NES    | PC    |
 |--------|-------|
@@ -62,7 +62,7 @@ Here are the keyboard mapping for the gamepad:
 | Start  | S     |
 | Select | A     |
 
-If you have a Xbox One-like controller connected, you can use it to control the gamepad. The mappings are
+If you have a Xbox One-like controller connected, you can use it to control the game pad. The mappings are
 
 | NES    | Gamepad    |
 |--------|------------|
@@ -77,12 +77,14 @@ If you have a Xbox One-like controller connected, you can use it to control the 
 
 The zapper is controlled with the mouse. Aim with the cursor and trigger with the left mouse button.
 
-There are also a couple of quality of life shortcuts:
+You can toggle on/off audio channels via the keys 1 to 5.
 
-1-4: Load state 1-4
-Shift 1-4: Save state 1-4
-
+1: Toggle pulse channel 1
+2: Toggle pulse channel 2
+3: Toggle triangle channel
+4: Toggle noise channel
+5: Toggle DMC channel
 
 ## Documentation
 
-Visit this [page](docs/README.md) to learn how the emulator works internally.
+Visit this [page](docs/README.md) to learn about this emulator.

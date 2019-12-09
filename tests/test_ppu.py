@@ -483,3 +483,19 @@ def test_ppu_state():
             ppu.emulate_once()
 
         odd_frame = not odd_frame
+
+
+def test_ppu_scrolling():
+    # This test replicates the manipulations done here:
+    # http://wiki.nesdev.com/w/index.php/PPU_scrolling#Summary
+    ppu = PPU()
+    ppu.write_byte(0x2000, 0)
+    ppu.read_byte(0x2002)
+    ppu.write_byte(0x2005, 0b01111101)
+    ppu.write_byte(0x2005, 0b01011110)
+    ppu.write_byte(0x2006, 0b00111101)
+    ppu.write_byte(0x2006, 0b11110000)
+    assert ppu.vram_address == 0b011110111110000
+    assert ppu._tmp_vram_address == 0b011110111110000
+    assert ppu._written_once is False
+    assert ppu._fine_x == 0b101
