@@ -821,17 +821,6 @@ class PPU:
         """
         return self._vram_address & 0b11111111111111
 
-    @property
-    def current_nametable_addr(self):
-        """
-        The current nametable address, based on the vram address
-        and the mirroring mask. This address gets updated after each high
-        pattern byte has been fetched.
-        """
-        # Credit for this next line goes to
-        # https://wiki.nesdev.com/w/index.php/PPU_scrolling#Tile_and_attribute_fetching
-        return 0x2000 | (self._vram_address & 0x0FFF)
-
     def _set_cpu(self, cpu):
         """
         Assigns the CPU.
@@ -847,8 +836,6 @@ class PPU:
     cpu = property(None, _set_cpu)
     memory_bus = property(None, _set_memory_bus)
 
-    _mirroring_mask = [0xFFFF, 0xFFFF, 0xFBFF, 0xF7FF]
-
     _ciram_index = [0, 0, 11, 10]
 
     def _read_ciram(self, addr):
@@ -862,10 +849,6 @@ class PPU:
             (((addr >> self._ciram_index[self._cartridge.mirroring_type]) & 1) << 10)
             | (0x3FF & addr)
         ] = value
-
-    @property
-    def _nametable_mirroring_mask(self):
-        return self._mirroring_mask[self._cartridge.mirroring_type]
 
     def read_byte(self, addr):
         """
@@ -1094,7 +1077,7 @@ class PPU:
         Store a nametable byte.
         """
         # Read the byte from memory.
-        self._name_table_byte = self._read_ciram(self.current_nametable_addr)
+        self._name_table_byte = self._read_ciram(self._vram_address)
 
         # Render the pixel
         if self._cycle_x <= 256:
