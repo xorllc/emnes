@@ -2,9 +2,9 @@
 
 ## Introduction
 
-Why another NES emulator? There are so many after all? Why not help a team working on an existing one? Well, there's a couple reason why this once needed to exist.
+Why another NES emulator? There are so many after all! Why not help a team working on an existing one? Well, there's a couple reason why this one needed to exist.
 
-- Most emulators are written in C++. I've already written a Gameboy Emulator in C++ and my weapon of choice right now is Python.
+- Most emulators are written in a compiled language. I've already written a Gameboy Emulator in C++ and my weapon of choice right now is Python.
 - Documentation is one of the most important skill for a developer, so the goal of this emulator is to document as much as possible the process of emulating a console.
 - But most importantly: fun.
 
@@ -20,12 +20,14 @@ Then,
 
 1. Clone the repository.
 2. From inside the repository, type `pip install .`.
-2. Type `emnes <path-to-rom>` to launch the emulator.
+3. Type `emnes <path-to-rom>` to launch the emulator.
 
 or
 
 1. Type `pip install git+https://github.com/jfboismenu/emnes.git#egg=emnes`.
 2. Type `emnes <path-to-rom>` from anywhere.
+
+You'll also need to `brew install sdl2` first.
 
 Here are the command line options:
 
