@@ -1,0 +1,12 @@
+pypy3 -m ensurepip
+pip uninstall emnes
+pypy3 setup.py install .
+pypy3 setup.py install
+ls
+pypy3 install .
+which pip
+pip
+pip version
+pip -V
+pypy3 -m pip install .
+emnes dk3.nes

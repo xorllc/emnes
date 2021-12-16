@@ -25,7 +25,8 @@ class AudioBuffer:
     def _audio_init(self):
         for i in range(sdl2.SDL_GetNumAudioDrivers()):
             driver_name = sdl2.SDL_GetAudioDriver(i)
-            if driver_name != b"coreaudio":
+            print(driver_name)
+            if driver_name != b"alsa":
                 continue
 
             assert sdl2.SDL_AudioInit(driver_name) == 0
